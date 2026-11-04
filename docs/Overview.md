@@ -33,8 +33,8 @@ WAO is **not** responsible for the business logic of each operand.
 ### Recap of responsbilitlities: OLM - WAO - Operand
 - **OLM**
   - On install of WAO
-    - Deploys all CRDs
-    - Deploys all RBAC
+    - Deploys all CRDs (including all operand CRDs and WAO's CRDs)
+    - Deploys all RBAC (including all operand RBAC and WAO's RBAC)ß
     - Deploys the WAO operator
 - **WAO**
   - On enable
@@ -114,7 +114,7 @@ spec:
 ```
 - For testing there is a script [hack/enable_all.sh](../hack/enable_all.sh)
 - You can also tweak the memory and cpu limits and requests for each operand, [config/samples/workloadavailability_v1alpha1_workloadavailabilityconfig_resources.yaml](../config/samples/workloadavailability_v1alpha1_workloadavailabilityconfig_resources.yaml)
-    - See [docs/configuring_resources.md](docs/configuring_resources.md) for more info
+    - See [docs/configuring-operand-resources.md](docs/configuring-operand-resources.md) for more info
   
 ### How upstream configuration becomes a WAO release
 
@@ -132,7 +132,7 @@ When we talk about WAO managing an operand we can think of 4 concerns for the op
 - Operand Image(s): WAO needs to know what images to use for the operand
 - CRDs:  WAO needs to have the CRD definitions which match the operand's image
 - RBAC:  WAO needs to have the RBAC resources which match the operand's image
-- Runtime manifests: WAO needs to know what runtime manifests to use for the operand's image
+- Runtime manifests: WAO needs to know what runtime manifests to deploy for the operand
 
 The above is addressed by:
 1. Copying the operand's `config` directory into `config/operands/<operand-name>/config`
@@ -143,16 +143,16 @@ The above is addressed by:
          - `overlays/rbac` - 
          - `overlays/runtime` 
     - The files under `config` are referenced for building:
-      - CRDs: [config/operands/crd/kustomization.yaml](config/operands/crd/kustomization.yaml)
+      - CRDs: [config/operands/crd/kustomization.yaml](/config/operands/crd/kustomization.yaml)
       - RBAC + Runtime manifests
         - Example of NHC, similar pattern for each operand:
-            - RBAC: [config/operands/nhc/overlays/rbac/kustomization.yaml](config/operands/nhc/overlays/rbac/kustomization.yaml)
-            - Runtime manifests: [config/operands/nhc/overlays/runtime/kustomization.yaml](config/operands/nhc/overlays/runtime/kustomization.yaml)
+            - RBAC: [config/operands/nhc/overlays/rbac/kustomization.yaml](/config/operands/nhc/overlays/rbac/kustomization.yaml)
+            - Runtime manifests: [config/operands/nhc/overlays/runtime/kustomization.yaml](/config/operands/nhc/overlays/runtime/kustomization.yaml)
               - which generates the runtime manifests to create when the operand is enabled
-                - [internal/operands/manifests/nhc/objects.yaml](internal/operands/manifests/nhc/objects.yaml)
+                - [internal/operands/manifests/nhc/objects.yaml](/internal/operands/manifests/nhc/objects.yaml)
                 - The above objects.yaml is embedded in the WAO manager process and contains the Deployment, Services, ConfigMaps, and Webhooks of the Operand to manage.
       
-2. Specify the operand image(s) by editing [`config/manager/manager.yaml`](config/manager/manager.yaml)
+2. Specify the operand image(s) by editing [`config/manager/manager.yaml`](/config/manager/manager.yaml)
   ```yaml
   env:
     - name: OPERATOR_NAMESPACE
@@ -181,25 +181,25 @@ We have a make target that can help to sync the operand manifests and set it's i
 1. Edit [operands.yaml](operands.yaml)
   - Ensure you have a local checkout of the operand repo at the branch you want
 2. Run `make update-operand-manifests`
-  - This will copy the operand's config files and update the images to the ones specified in [operands.yaml](operands.yaml)
+  - This will copy the operand's config files and update the images to the ones specified in [operands.yaml](/operands.yaml)
   - You can also run `make update-<operand>-manifests` to update only a specific operand's manifests
 
-See [docs/updating-operand-manifests.md](docs/updating-operand-manifests.md) for more information.
+See [docs/updating-operand-manifests.md](/docs/updating-operand-manifests.md) for more information.
 
 ### How do I deploy today?
 You can deploy using the `dev-olm-deploy` target as the other operators
 - ```make dev-olm-deploy```
 
 Or you can walk through a: `make docker-build docker-push bundle-build bundle-push catalog-build catalog-push`
-- See [hack/wao-make_and_deploy.sh](hack/wao-make_and_deploy.sh) as a script to walk through above.
-- and for cleanup see [hack/wao-purge.sh](hack/wao-purge.sh)
+- See [hack/wao-make_and_deploy.sh](/hack/wao-make_and_deploy.sh) as a script to walk through above.
+- and for cleanup see [hack/wao-purge.sh](/hack/wao-purge.sh)
 - There are also OLMv1 variants if you are interested
-  - [hack/olmv1-make-and-deploy-wao.sh](hack/olmv1-make-and-deploy-wao.sh)
-  - [hack/olmv1-purge-wao.sh](hack/olmv1-purge-wao.sh)
+  - [hack/olmv1-make-and-deploy-wao.sh](/hack/olmv1-make-and-deploy-wao.sh)
+  - [hack/olmv1-purge-wao.sh](/hack/olmv1-purge-wao.sh)
 
 Before you deploy WAO to your cluster you need to uninstall any existing medik8s operators.
 After you have WAO running on your cluster you need to enable the components you want to use.
-- See [hack/enable_all.sh](hack/enable_all.sh)
+- See [hack/enable_all.sh](/hack/enable_all.sh)
 
 ## Upgrade Scenario
 The upgrade scenario is still being tested, the expected workflow is:
