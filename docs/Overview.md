@@ -178,7 +178,7 @@ The above is addressed by:
   ```
 #### Scripted way to sync operands into WAO - make update-operand-manifests
 We have a make target that can help to sync the operand manifests and set it's images.
-1. Edit [operands.yaml](operands.yaml)
+1. Edit [operands.yaml](/operands.yaml)
    - Ensure you have a local checkout of the operand repo at the branch you want
 2. Run `make update-operand-manifests`
    - This will copy the operand's config files and update the images to the ones specified in [operands.yaml](/operands.yaml)
