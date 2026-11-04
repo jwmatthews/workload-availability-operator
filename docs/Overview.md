@@ -212,9 +212,10 @@ The upgrade scenario is still being tested, the expected workflow is:
 7. Enable components that match was installed/enabled on cluster prior
 8. Cluster exists maintenance window
 
-
 - First phase of work is walking through the manual upgrade flow and then working towards this in a CLI.
 - Would like to have a declarative way to run this flow for shops that have fully adopted GitOps.
+  - Assume Plan to publish an Argo and pipelines workflow as a reference
+  - Note upgrade tooling is targetted for a 5.8.z cycle
 - Need to learn more of how Virt AutoPilot is integrating medik8s, this is likely where we can smooth the upgrade experience for many virt users.
 
 ## Current Status
@@ -234,5 +235,4 @@ The `wao` branch started from each operand's`medik8s5.8` branch as of 11/2/2026
     - Implement `bundle-k8s`, we currently only create a bundle for `ocp`
     - Consider: Bring webhooks to run in the WAO process so they are available and running even when a component is disabled.
     - Consider: Rewrite the internal/operands/manifests/`<operand name>`/objects.yaml in Go and stop trying to sync from the operand repo.
-    -  Condier: In future releases refactoring the code layout to better conform to kubebuilder https://book.kubebuilder.io/reference/project-config.html
-    
+    - Consider: In future releases refactoring the code layout to better conform to kubebuilder https://book.kubebuilder.io/reference/project-config.html
