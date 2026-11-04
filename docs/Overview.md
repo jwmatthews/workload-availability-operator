@@ -19,22 +19,22 @@ WAO treats the existing medik8s operators as **operands** which are managed by t
 
 WAO is responsible for:
 - **CRDs** - Collecting all of the operand CRDs and packaging so OLM will deploy.
-  - This means that all of the operand CRDs are installed into the cluster at time of WAO installtion.
+  - This means that all of the operand CRDs are installed into the cluster at time of WAO installation.
   - CRDs are NOT gated on the WAO operator's `enabled` state.
 - **RBAC** - Collecting all of the operand RBAC related files and packaging in the WAO bundle so OLM will deploy on install of WAO.
 - **Runtime manifests** - Understanding the runtime manifests for each operand and deploying them when the operand is `enabled`.
   - and...cleaning them up when the operand is `disabled`.
 
 WAO is **not** responsible for the business logic of each operand.
-- Each operand will continue to be developed in it's own repository.
+- Each operand will continue to be developed in its own repository.
 - Operand changes are intended to be minimal to none
-  - As of today we have not made any changes to any of the operands, yet it's likely will want to refactor the webhooks soon to allow them to be brought into the main WAO manager process.
+  - As of today we have not made any changes to any of the operands, yet its likely will want to refactor the webhooks soon to allow them to be brought into the main WAO manager process.
 
-### Recap of responsbilitlities: OLM - WAO - Operand
+### Recap of responsibilities: OLM - WAO - Operand
 - **OLM**
   - On install of WAO
     - Deploys all CRDs (including all operand CRDs and WAO's CRDs)
-    - Deploys all RBAC (including all operand RBAC and WAO's RBAC)ß
+    - Deploys all RBAC (including all operand RBAC and WAO's RBAC)
     - Deploys the WAO operator
 - **WAO**
   - On enable
@@ -42,7 +42,7 @@ WAO is **not** responsible for the business logic of each operand.
   - On disable
     - Removes the operand's runtime manifests
 - **Operand**
-  - Responsible for reconciling it's CRs
+  - Responsible for reconciling its CRs
   - Currently runs their own webhook server, we likely will want to move this to run in the main WAO manager process.
 
 ### What does install of WAO look like?
@@ -177,7 +177,7 @@ The above is addressed by:
       value: quay.io/medik8s/node-maintenance-operator:wao
   ```
 #### Scripted way to sync operands into WAO - make update-operand-manifests
-We have a make target that can help to sync the operand manifests and set it's images.
+We have a make target that can help to sync the operand manifests and set its images.
 1. Edit [operands.yaml](/operands.yaml)
    - Ensure you have a local checkout of the operand repo at the branch you want
 2. Run `make update-operand-manifests`
@@ -230,7 +230,7 @@ The `wao` branch started from each operand's`medik8s5.8` branch as of 11/2/2026
 ## Next Steps
 1. Testing: Work to understand if there are blockers that prevent the goal of WAO for medik8s 5.9
 2. Iron out the upgrade scenario 
-2. Additional cleanup in WAO code:
+3. Additional cleanup in WAO code:
     - Implement `bundle-k8s`, we currently only create a bundle for `ocp`
-    - Consider: Bring webhooks to run in the WAO process so they are availabile and running even when a component is disabled.
-    - Consider: Rewrite the internal/operands/manifests/<operand name>/objects.yaml in Go and stop trying to sync from the operand repo.
+    - Consider: Bring webhooks to run in the WAO process so they are available and running even when a component is disabled.
+    - Consider: Rewrite the internal/operands/manifests/`<operand name>`/objects.yaml in Go and stop trying to sync from the operand repo.
