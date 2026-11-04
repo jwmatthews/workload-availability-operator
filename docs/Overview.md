@@ -114,7 +114,7 @@ spec:
 ```
 - For testing there is a script [hack/enable_all.sh](../hack/enable_all.sh)
 - You can also tweak the memory and cpu limits and requests for each operand, [config/samples/workloadavailability_v1alpha1_workloadavailabilityconfig_resources.yaml](../config/samples/workloadavailability_v1alpha1_workloadavailabilityconfig_resources.yaml)
-    - See [docs/configuring-operand-resources.md](docs/configuring-operand-resources.md) for more info
+    - See [docs/configuring-operand-resources.md](/docs/configuring-operand-resources.md) for more info
   
 ### How upstream configuration becomes a WAO release
 
