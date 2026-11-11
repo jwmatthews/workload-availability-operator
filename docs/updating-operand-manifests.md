@@ -77,6 +77,45 @@ discovery. The selected images must be available when you later run the operands
 If only image selections changed, run `make operand-manifests` directly. A source
 refresh is needed when you want to copy updated configuration from a checkout.
 
+## FAR inventory and debugging
+
+The WAO Deployment includes an init container named `far-agent-inventory`.
+It uses the FAR image selected in `operands.yaml`.
+Image synchronization updates both this container and the manager's
+`RELATED_IMAGE_FAR_MANAGER` value. The init container always checks the registry
+when Kubernetes starts it.
+
+The init container overrides the FAR entrypoint and lists `/usr/sbin`.
+It does not start the FAR manager or execute a fence agent.
+It writes two reports into a shared `emptyDir` volume:
+
+- `/var/run/wao/far-inventory/usr-sbin.list` contains permissions, sizes, and symbolic link targets.
+- `/var/run/wao/far-inventory/usr-sbin.names` contains one entry name per line.
+
+These paths refer to the read-only mount in WAO's manager container.
+The inventory includes directories and symbolic links, regardless of their names.
+It does not establish whether each entry is an executable fence agent.
+WAO does not yet read these reports or use them for admission checks.
+
+Inventory runs for each new WAO Pod, including when the FAR component is disabled.
+A manager container restart within the same Pod does not repeat inventory.
+Replacing the Pod removes its reports.
+
+WAO's manager starts only after inventory succeeds.
+An image pull failure or inventory error prevents manager startup.
+The init container prints the entry count and full listing to its logs.
+Use these commands to inspect startup failures:
+
+```sh
+kubectl --kubeconfig /path/to/kubeconfig -n <wao-namespace> \
+  describe pod <wao-pod>
+kubectl --kubeconfig /path/to/kubeconfig -n <wao-namespace> \
+  logs <wao-pod> -c far-agent-inventory
+```
+
+Use `--previous` with the log command after an init container restart.
+The manager's default logs do not include init container output.
+
 ## Choose the update target
 
 These targets each refresh one operand:

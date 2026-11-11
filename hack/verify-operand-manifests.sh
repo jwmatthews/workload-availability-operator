@@ -35,6 +35,10 @@ refs=$(YQ="$YQ" hack/operand-image-refs.sh)
 while IFS=$'\t' read -r env want; do
   got=$("$YQ" "select(.kind == \"Deployment\") | .spec.template.spec.containers[0].env[] | select(.name == \"$env\") | .value" config/manager/manager.yaml)
   [ "$want" = "$got" ] || problem "manager.yaml $env=$got, operands.yaml reference is $want"
+  if [ "$env" = "RELATED_IMAGE_FAR_MANAGER" ]; then
+    got=$("$YQ" 'select(.kind == "Deployment") | .spec.template.spec.initContainers[] | select(.name == "far-agent-inventory") | .image' config/manager/manager.yaml)
+    [ "$want" = "$got" ] || problem "manager.yaml FAR inventory image=$got, operands.yaml reference is $want"
+  fi
 done <<< "$refs"
 
 # 4. Every operand ServiceAccount is in exactly one of OPERAND_SERVICE_ACCOUNTS (roles folded into

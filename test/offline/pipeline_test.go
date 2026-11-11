@@ -137,7 +137,7 @@ func (tr *tree) changeTags() {
 	tr.saveOperands(inputs)
 }
 
-// A tag change in operands.yaml reaches only the manager Deployment env; overlays, embedded
+// A tag change in operands.yaml reaches only the manager Deployment; overlays, embedded
 // objects and Go definitions are untouched.
 func TestTagChangesEditOnlyManagerYAML(t *testing.T) {
 	tr := newTree(t)

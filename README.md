@@ -64,7 +64,7 @@ This operator does NOT intend to change the behavior or functionality of the und
 | `config/operands/<key>/config/` | Complete copied upstream `config/` tree; replaced when refreshing that operand |
 | `config/operands/<key>/overlays/{rbac,runtime}/` | WAO-owned packaging and runtime adjustments; retained when refreshing |
 | `hack/update-operand-manifests.sh` | Local config copying and selected image synchronization |
-| `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh` | Offline validation of `operands.yaml` and `RELATED_IMAGE_*` synchronization into the manager Deployment |
+| `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh` | Offline validation of `operands.yaml` and synchronization of manager environment values and the FAR inventory image |
 | `hack/verify-operand-manifests.sh` | Generated consistency and RBAC/bundle shape checks |
 | `bundle/` | Generated OLM bundle: one CSV, thirteen CRDs, operand RBAC |
 | `config/catalog/`, `catalog/` | Catalog templates and rendered file-based catalog |
@@ -97,7 +97,7 @@ The three steps have separate responsibilities:
   `update-far-manifests`, `update-mdr-manifests`, and `update-nmo-manifests` refresh one
   operand and synchronize its image settings. `update-operand-manifests` does all six
   sequentially. These targets neither render objects nor generate a bundle.
-- **Render:** `operand-manifests` synchronizes `RELATED_IMAGE_*` in
+- **Render:** `operand-manifests` synchronizes `RELATED_IMAGE_*` and the FAR inventory image in
   `config/manager/manager.yaml` and generates `internal/operands/manifests/<key>/objects.yaml`.
   The embedded objects carry `__WAO_<ENV>__:placeholder` image tokens that the operator
   replaces with its `RELATED_IMAGE_*` values at reconcile time. It needs no operand checkout.
@@ -133,8 +133,13 @@ Each image has its own repository and tag, including the NHC console and SBR age
 Tags such as `latest`, `wao`, and `v0.12.0` are used literally. The helper trusts your
 source/image combination: it does not contact a registry, resolve digests, infer
 source commits, or require an image to have been published. The runtime overlays are
-static and need no edit when a tag changes. This does not add tag polling, automatic
-rollouts, or different pull policies.
+static and need no edit when a tag changes. Changing a tag does not add tag polling
+or automatic rollouts.
+
+Each new WAO Pod inventories the selected FAR image through an init container.
+The reports include every immediate entry under `/usr/sbin`.
+See [FAR inventory and debugging](docs/updating-operand-manifests.md#far-inventory-and-debugging)
+for report paths, startup behavior, and log commands.
 
 Supported Make builds (`manager`, `run`, `docker-build`, and the shared `dev-build`)
 perform the render step before compiling WAO. They never refresh source checkouts.

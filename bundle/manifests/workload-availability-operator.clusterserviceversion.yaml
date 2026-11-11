@@ -1533,12 +1533,52 @@ spec:
                       capabilities:
                         drop:
                           - ALL
+                    volumeMounts:
+                      - mountPath: /var/run/wao/far-inventory
+                        name: far-agent-inventory
+                        readOnly: true
+                initContainers:
+                  - args:
+                      - |
+                        umask 022
+                        printf 'Inventorying /usr/sbin in the FAR image\n'
+                        ls -la /usr/sbin > /inventory/usr-sbin.list
+                        ls -1A /usr/sbin > /inventory/usr-sbin.names
+                        printf 'Directory entries: '
+                        wc -l < /inventory/usr-sbin.names
+                        printf 'Inventory files: /inventory/usr-sbin.list and /inventory/usr-sbin.names\n'
+                        cat /inventory/usr-sbin.list
+                    command:
+                      - /bin/sh
+                      - -ec
+                    image: quay.io/medik8s/fence-agents-remediation-operator:wao
+                    imagePullPolicy: Always
+                    name: far-agent-inventory
+                    resources:
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                    volumeMounts:
+                      - mountPath: /inventory
+                        name: far-agent-inventory
                 securityContext:
                   runAsNonRoot: true
                   seccompProfile:
                     type: RuntimeDefault
                 serviceAccountName: workload-availability-operator-controller-manager
                 terminationGracePeriodSeconds: 10
+                volumes:
+                  - emptyDir: {}
+                    name: far-agent-inventory
       permissions:
         - rules:
             - apiGroups:

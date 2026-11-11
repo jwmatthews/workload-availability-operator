@@ -129,6 +129,13 @@ func TestIndependentTaggedImagesStayAligned(t *testing.T) {
 			if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
 				t.Errorf("%s = %s, want %s", env, got, want)
 			}
+			if env == "RELATED_IMAGE_FAR_MANAGER" {
+				query := `select(.kind == "Deployment") | .spec.template.spec.initContainers[]?
+ | select(.name == "far-agent-inventory") | .image`
+				if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
+					t.Errorf("FAR inventory image = %s, want %s", got, want)
+				}
+			}
 			objects := string(tr.read("internal/operands/manifests/" + key + "/objects.yaml"))
 			if strings.Contains(objects, want) || !strings.Contains(objects, "__WAO_"+env+"__:placeholder") {
 				t.Errorf("%s runtime objects must carry the %s placeholder, not %s", key, env, want)
@@ -147,6 +154,10 @@ func TestImagePreflightRejectsMissingAndDuplicateDestinations(t *testing.T) {
     | select(.name == "RELATED_IMAGE_NHC_MANAGER"))`, "config/manager/manager.yaml"},
 		{"duplicate-manager", `(select(.kind == "Deployment") | .spec.template.spec.containers[0].env)
     += [{"name":"RELATED_IMAGE_NHC_MANAGER","value":"duplicate"}]`, "config/manager/manager.yaml"},
+		{"far-inventory", `del(.spec.template.spec.initContainers[]?
+    | select(.name == "far-agent-inventory"))`, "config/manager/manager.yaml"},
+		{"duplicate-far-inventory", `(select(.kind == "Deployment") | .spec.template.spec.initContainers)
+    += [{"name":"far-agent-inventory","image":"duplicate"}]`, "config/manager/manager.yaml"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

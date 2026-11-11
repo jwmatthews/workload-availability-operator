@@ -57,6 +57,39 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: far-agent-inventory
+          # Synchronized from operands.yaml with RELATED_IMAGE_FAR_MANAGER.
+          image: quay.io/medik8s/fence-agents-remediation-operator:wao
+          imagePullPolicy: Always
+          # Override the FAR manager entrypoint. Do not execute fence agents.
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              umask 022
+              printf 'Inventorying /usr/sbin in the FAR image\n'
+              ls -la /usr/sbin > /inventory/usr-sbin.list
+              ls -1A /usr/sbin > /inventory/usr-sbin.names
+              printf 'Directory entries: '
+              wc -l < /inventory/usr-sbin.names
+              printf 'Inventory files: /inventory/usr-sbin.list and /inventory/usr-sbin.names\n'
+              cat /inventory/usr-sbin.list
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - "ALL"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: far-agent-inventory
+              mountPath: /inventory
       containers:
         - command:
             - /manager
@@ -116,7 +149,12 @@ spec:
             requests:
               cpu: 10m
               memory: 64Mi
-          volumeMounts: []
-      volumes: []
+          volumeMounts:
+            - name: far-agent-inventory
+              mountPath: /var/run/wao/far-inventory
+              readOnly: true
+      volumes:
+        - name: far-agent-inventory
+          emptyDir: {}
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
