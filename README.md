@@ -64,7 +64,7 @@ This operator does NOT intend to change the behavior or functionality of the und
 | `config/operands/<key>/config/` | Complete copied upstream `config/` tree; replaced when refreshing that operand |
 | `config/operands/<key>/overlays/{rbac,runtime}/` | WAO-owned packaging and runtime adjustments; retained when refreshing |
 | `hack/update-operand-manifests.sh` | Local config copying and selected image synchronization |
-| `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh` | Offline validation of `operands.yaml` and `RELATED_IMAGE_*` synchronization into the manager Deployment |
+| `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh` | Offline validation of `operands.yaml` and synchronization of manager environment values and the FAR build image |
 | `hack/verify-operand-manifests.sh` | Generated consistency and RBAC/bundle shape checks |
 | `bundle/` | Generated OLM bundle: one CSV, thirteen CRDs, operand RBAC |
 | `config/catalog/`, `catalog/` | Catalog templates and rendered file-based catalog |
@@ -99,6 +99,7 @@ The three steps have separate responsibilities:
   sequentially. These targets neither render objects nor generate a bundle.
 - **Render:** `operand-manifests` synchronizes `RELATED_IMAGE_*` in
   `config/manager/manager.yaml` and generates `internal/operands/manifests/<key>/objects.yaml`.
+  It also synchronizes `ARG FAR_IMAGE` in the Dockerfile from the selected FAR image.
   The embedded objects carry `__WAO_<ENV>__:placeholder` image tokens that the operator
   replaces with its `RELATED_IMAGE_*` values at reconcile time. It needs no operand checkout.
 - **Package:** `bundle` or `bundle-reset` generates the OLM bundle from copied CRDs
@@ -140,6 +141,11 @@ Supported Make builds (`manager`, `run`, `docker-build`, and the shared `dev-bui
 perform the render step before compiling WAO. They never refresh source checkouts.
 Before bypassing Make with a direct `podman build` or `docker build`, run
 `make operand-manifests` yourself; the Dockerfile consumes the prepared files.
+
+The container build inventories every immediate entry under `/usr/sbin` in the
+selected FAR image. It copies only the reports into the final WAO image.
+See [FAR inventory during the container build](docs/updating-operand-manifests.md#far-inventory-during-the-container-build)
+for report paths, build commands, and limits.
 
 Never hand-edit generated runtime objects. `make verify-operand-manifests` regenerates,
 compares against the files it found, including uncommitted updates, restores them, and

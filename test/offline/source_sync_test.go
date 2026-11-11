@@ -253,7 +253,7 @@ func TestUpdateOnlySynchronizesSelectedImagesWithoutHiddenWork(t *testing.T) {
 	imageEntry(inputs, "nhc", "RELATED_IMAGE_NHC_MANAGER")["tag"] = "unpublished-dev"
 	imageEntry(inputs, "snr", "RELATED_IMAGE_SNR_MANAGER")["tag"] = "other-unpublished"
 	tr.saveOperands(inputs)
-	paths := []string{"internal/operands/manifests", "bundle", "operands.yaml", "config/operands/snr"}
+	paths := []string{"internal/operands/manifests", "bundle", "operands.yaml", "config/operands/snr", "Dockerfile"}
 	before := tr.snapshot(paths...)
 	mocks := tr.path("mocks")
 	if err := os.Mkdir(mocks, 0o755); err != nil {

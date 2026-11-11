@@ -43,11 +43,15 @@ require_one() {
   [ "$count" = 1 ] || { echo "$key/$env: expected exactly one image destination in $file" >&2; exit 1; }
 }
 
-# Preflight the manager Deployment env entries before emitting records or allowing any mutation.
+# Preflight selected image destinations before emitting records or allowing any mutation.
 while IFS=$'\t' read -r key env repository tag; do
   export WAO_IMAGE_ENV="$env"
   require_one config/manager/manager.yaml \
     '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[] | select(.name == "manager") | .env[] | select(.name == env.WAO_IMAGE_ENV)]'
+  if [ "$env" = "RELATED_IMAGE_FAR_MANAGER" ]; then
+    count=$(grep -c '^ARG FAR_IMAGE=' Dockerfile || true)
+    [ "$count" = 1 ] || { echo "$key/$env: expected exactly one ARG FAR_IMAGE= in Dockerfile" >&2; exit 1; }
+  fi
 done < "$work"
 while IFS=$'\t' read -r key env repository tag; do
   printf '%s\t%s:%s\n' "$env" "$repository" "$tag"

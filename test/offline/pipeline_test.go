@@ -33,7 +33,7 @@ func newTree(t *testing.T) *tree {
 			t.Fatal(err)
 		}
 	}
-	for _, file := range []string{"Makefile", "operands.yaml", "go.mod", "go.sum"} {
+	for _, file := range []string{"Dockerfile", "Makefile", "operands.yaml", "go.mod", "go.sum"} {
 		data, err := os.ReadFile(filepath.Join(src, file))
 		if err != nil {
 			t.Fatal(err)
@@ -137,12 +137,13 @@ func (tr *tree) changeTags() {
 	tr.saveOperands(inputs)
 }
 
-// A tag change in operands.yaml reaches only the manager Deployment env; overlays, embedded
-// objects and Go definitions are untouched.
-func TestTagChangesEditOnlyManagerYAML(t *testing.T) {
+// A tag change updates the manager Deployment and FAR build image without changing
+// overlays, embedded objects or Go definitions.
+func TestTagChangesEditOnlyImageDestinations(t *testing.T) {
 	tr := newTree(t)
 	before := tr.snapshot("internal", "config/operands")
 	manager := tr.read("config/manager/manager.yaml")
+	dockerfile := tr.read("Dockerfile")
 	tr.changeTags()
 	tr.run("make", "-s", "operand-manifests")
 	if !maps.Equal(before, tr.snapshot("internal", "config/operands")) {
@@ -150,6 +151,9 @@ func TestTagChangesEditOnlyManagerYAML(t *testing.T) {
 	}
 	if string(tr.read("config/manager/manager.yaml")) == string(manager) {
 		t.Error("manager.yaml did not pick up the new tags")
+	}
+	if string(tr.read("Dockerfile")) == string(dockerfile) {
+		t.Error("Dockerfile did not pick up the selected FAR image")
 	}
 	tr.run("go", "test", "./internal/components", "./internal/operands", "-count=1")
 }
@@ -178,6 +182,23 @@ func TestVerificationRejectsStaleRuntimeObjectsWithoutMutating(t *testing.T) {
 	}
 	if !strings.Contains(string(tr.read(objects)), "example.test/nhc:stale") {
 		t.Error("verification rewrote the stale file instead of leaving the tree as it found it")
+	}
+}
+
+func TestVerificationRestoresImageDestinationsAfterGenerationFailure(t *testing.T) {
+	tr := newTree(t)
+	inputs := tr.loadOperands()
+	imageEntry(inputs, "far", "RELATED_IMAGE_FAR_MANAGER")["tag"] = "changed-before-failure"
+	tr.saveOperands(inputs)
+	tr.run("bin/yq", "-i", `.resources += ["missing-resource.yaml"]`,
+		"config/operands/far/overlays/runtime/kustomization.yaml")
+	before := tr.snapshot("Dockerfile", "config", "internal/operands/manifests")
+	out, err := tr.try("make", "-s", "verify-operand-manifests")
+	if err == nil || !strings.Contains(out, "missing-resource.yaml") {
+		t.Fatalf("expected an overlay generation failure: %v\n%s", err, out)
+	}
+	if !maps.Equal(before, tr.snapshot("Dockerfile", "config", "internal/operands/manifests")) {
+		t.Fatal("failed verification changed image settings or generated manifests")
 	}
 }
 

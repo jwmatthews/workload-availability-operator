@@ -1,3 +1,17 @@
+# Synchronized from operands.yaml with RELATED_IMAGE_FAR_MANAGER.
+ARG FAR_IMAGE=quay.io/medik8s/fence-agents-remediation-operator:wao
+
+# Inspect the existing FAR image during the WAO build. Do not execute agents.
+FROM ${FAR_IMAGE} AS far-inventory
+ARG FAR_IMAGE
+RUN umask 022 \
+    && mkdir -p /tmp/wao-far-inventory \
+    && printf '%s\n' "${FAR_IMAGE}" > /tmp/wao-far-inventory/source-image \
+    && LC_ALL=C ls -la /usr/sbin > /tmp/wao-far-inventory/usr-sbin.list \
+    && LC_ALL=C ls -1A /usr/sbin > /tmp/wao-far-inventory/usr-sbin.names \
+    && printf 'FAR inventory entries: ' \
+    && wc -l < /tmp/wao-far-inventory/usr-sbin.names
+
 # Build the manager binary
 FROM quay.io/konveyor/builder:ubi9-latest AS builder
 
@@ -37,6 +51,7 @@ RUN --mount=type=cache,id=wao-go-build,target=/go/build-cache \
 FROM registry.access.redhat.com/ubi9/ubi-micro:latest
 WORKDIR /
 COPY --from=builder /workspace/bin/manager .
+COPY --from=far-inventory /tmp/wao-far-inventory/ /usr/share/wao/far-inventory/
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

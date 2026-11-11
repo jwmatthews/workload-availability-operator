@@ -129,6 +129,12 @@ func TestIndependentTaggedImagesStayAligned(t *testing.T) {
 			if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
 				t.Errorf("%s = %s, want %s", env, got, want)
 			}
+			if env == "RELATED_IMAGE_FAR_MANAGER" {
+				got := strings.TrimSpace(tr.run("sed", "-n", "s/^ARG FAR_IMAGE=//p", "Dockerfile"))
+				if got != want {
+					t.Errorf("FAR build image = %s, want %s", got, want)
+				}
+			}
 			objects := string(tr.read("internal/operands/manifests/" + key + "/objects.yaml"))
 			if strings.Contains(objects, want) || !strings.Contains(objects, "__WAO_"+env+"__:placeholder") {
 				t.Errorf("%s runtime objects must carry the %s placeholder, not %s", key, env, want)
@@ -139,6 +145,35 @@ func TestIndependentTaggedImagesStayAligned(t *testing.T) {
 		t.Fatal("render changed inputs or bundle")
 	}
 	tr.run("go", "test", "./internal/components", "./internal/operands", "-count=1")
+}
+
+func TestFARBuildImagePreflightPreservesDestinations(t *testing.T) {
+	for _, name := range []string{"missing", "duplicate"} {
+		t.Run(name, func(t *testing.T) {
+			tr := newTree(t)
+			dockerfile := string(tr.read("Dockerfile"))
+			if name == "missing" {
+				var lines []string
+				for _, line := range strings.Split(dockerfile, "\n") {
+					if !strings.HasPrefix(line, "ARG FAR_IMAGE=") {
+						lines = append(lines, line)
+					}
+				}
+				dockerfile = strings.Join(lines, "\n")
+			} else {
+				dockerfile += "\nARG FAR_IMAGE=example.test/far:duplicate\n"
+			}
+			tr.write("Dockerfile", []byte(dockerfile))
+			before := tr.snapshot("Dockerfile", "config")
+			out, err := tr.try("bash", "hack/sync-operand-images.sh")
+			if err == nil || !strings.Contains(out, "FAR_IMAGE") {
+				t.Fatalf("expected a FAR_IMAGE preflight failure: %v\n%s", err, out)
+			}
+			if !maps.Equal(before, tr.snapshot("Dockerfile", "config")) {
+				t.Fatal("failed preflight changed image destinations")
+			}
+		})
+	}
 }
 
 func TestImagePreflightRejectsMissingAndDuplicateDestinations(t *testing.T) {

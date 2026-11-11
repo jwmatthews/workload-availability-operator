@@ -15,14 +15,24 @@ YQ="$YQ" hack/operand-image-refs.sh >/dev/null
 # 2. Regeneration reproduces the current files, including unstaged operand updates.
 # Compare contents rather than the Git index so local updates can be verified before committing;
 # on drift, put the pre-regeneration copy back and report.
-generated=(internal/operands/manifests config/operands config/manager/manager.yaml)
+generated=(internal/operands/manifests config/operands config/manager/manager.yaml Dockerfile)
 for path in "${generated[@]}"; do
   if [ -e "$path" ]; then
     mkdir -p "$work/$(dirname "$path")"
     cp -R "$path" "$work/$path"
   fi
 done
-make -s operand-manifests
+if ! make -s operand-manifests; then
+  # Image synchronization can succeed before a later overlay fails.
+  # Restore every destination, including any that generation created.
+  for path in "${generated[@]}"; do
+    rm -rf "$path"
+    if [ -e "$work/$path" ]; then
+      cp -R "$work/$path" "$path"
+    fi
+  done
+  exit 1
+fi
 for path in "${generated[@]}"; do
   if ! diff -qr "$work/$path" "$path"; then
     problem "generated files differ in $path; run make operand-manifests and review the changes"
@@ -35,6 +45,10 @@ refs=$(YQ="$YQ" hack/operand-image-refs.sh)
 while IFS=$'\t' read -r env want; do
   got=$("$YQ" "select(.kind == \"Deployment\") | .spec.template.spec.containers[0].env[] | select(.name == \"$env\") | .value" config/manager/manager.yaml)
   [ "$want" = "$got" ] || problem "manager.yaml $env=$got, operands.yaml reference is $want"
+  if [ "$env" = "RELATED_IMAGE_FAR_MANAGER" ]; then
+    got=$(sed -n 's/^ARG FAR_IMAGE=//p' Dockerfile)
+    [ "$want" = "$got" ] || problem "Dockerfile FAR_IMAGE=$got, operands.yaml reference is $want"
+  fi
 done <<< "$refs"
 
 # 4. Every operand ServiceAccount is in exactly one of OPERAND_SERVICE_ACCOUNTS (roles folded into

@@ -77,6 +77,68 @@ discovery. The selected images must be available when you later run the operands
 If only image selections changed, run `make operand-manifests` directly. A source
 refresh is needed when you want to copy updated configuration from a checkout.
 
+## FAR inventory during the container build
+
+The Dockerfile has a build stage named `far-inventory`.
+It uses the existing FAR image selected in `operands.yaml`.
+Image synchronization updates both `ARG FAR_IMAGE` and the manager's
+`RELATED_IMAGE_FAR_MANAGER` value. The shared development build also uses this Dockerfile.
+
+The stage lists `/usr/sbin` and records the selected image reference.
+It does not start the FAR manager or execute a fence agent.
+The final WAO image contains these files:
+
+- `/usr/share/wao/far-inventory/usr-sbin.list` contains permissions, sizes, and symbolic link targets.
+- `/usr/share/wao/far-inventory/usr-sbin.names` contains one entry name per line.
+- `/usr/share/wao/far-inventory/source-image` contains the selected FAR image reference.
+
+The inventory includes directories and symbolic links, regardless of their names.
+It does not establish whether each entry is an executable fence agent.
+WAO does not yet read the reports or use them for admission checks.
+The final image contains no FAR executables from the inventory stage.
+This approach requires no Deployment, CSV, init container, or volume changes.
+
+To build a local WAO image with the current FAR image:
+
+```sh
+make operand-manifests
+podman build --platform linux/amd64 --pull=always \
+  -t localhost/wao-build-inventory:explore .
+```
+
+To inspect the reports without starting WAO:
+
+```sh
+wao_inventory_container=$(podman create localhost/wao-build-inventory:explore)
+podman cp "$wao_inventory_container":/usr/share/wao/far-inventory ./far-inventory
+podman rm "$wao_inventory_container"
+cat ./far-inventory/source-image
+cat ./far-inventory/usr-sbin.names
+```
+
+`podman create` creates a stopped container. It does not start `/manager`.
+The reports remain available when the container has no shell or listing tools.
+
+For a faster inventory-only check, build the `far-inventory` target.
+This target skips Go compilation and produces an intermediate image based on FAR:
+
+```sh
+podman build --target far-inventory --platform linux/amd64 --pull=always \
+  -t localhost/wao-far-inventory:explore .
+```
+
+Inventory failure stops the build. It does not add a WAO startup dependency on FAR.
+Host builds through `make manager` or `make run` do not produce the reports.
+The reports are container build outputs, rather than tracked source files.
+
+The inventory records the FAR image used during the WAO build.
+A mutable tag such as `wao` can later refer to different contents.
+Rebuild WAO when the FAR image changes.
+Use `--pull=always` to refresh the FAR base image before generating a new inventory.
+The standard build commands can otherwise reuse cached images and inventory layers.
+Changing `RELATED_IMAGE_FAR_MANAGER` in a running Deployment does not replace the reports.
+This prototype does not resolve image digests or detect changes to mutable tags.
+
 ## Choose the update target
 
 These targets each refresh one operand:
@@ -115,7 +177,7 @@ The commands have separate outputs:
 | --- | --- |
 | `make update-nhc-manifests` | Replace `config/operands/nhc/config/`; synchronize NHC `RELATED_IMAGE_*` values in `config/manager/manager.yaml` |
 | `make update-operand-manifests` | Perform the same update for all six operands |
-| `make operand-manifests` | Synchronize all `RELATED_IMAGE_*` values; generate `internal/operands/manifests/<key>/objects.yaml` |
+| `make operand-manifests` | Synchronize all `RELATED_IMAGE_*` values and the FAR build image; generate `internal/operands/manifests/<key>/objects.yaml` |
 | `make bundle-reset` | Generate and normalize `bundle/` from copied CRDs and WAO packaging configuration |
 
 Refreshing a copy removes stale files deleted upstream. WAO-owned
