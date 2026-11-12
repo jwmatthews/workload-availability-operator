@@ -21,7 +21,8 @@ spec:
     matchLabels:
       control-plane: controller-manager
       app.kubernetes.io/name: workload-availability-operator
-  replicas: 1
+  # Each replica serves FAR admission. Only the leader reconciles.
+  replicas: 2
   template:
     metadata:
       annotations:
@@ -50,6 +51,17 @@ spec:
       #             operator: In
       #             values:
       #               - linux
+      # Prefer different nodes for the two replicas. This is not a requirement, so both can start on one node.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    control-plane: controller-manager
+                    app.kubernetes.io/name: workload-availability-operator
       securityContext:
         # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
         # This ensures that deployments meet the highest security requirements for Kubernetes.
@@ -57,6 +69,38 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Collect the fence agent names from the selected FAR image for FAR admission.
+        # The command reads directory entries only. It does not start the FAR manager or a fence agent.
+        # hack/sync-operand-images.sh keeps this image equal to RELATED_IMAGE_FAR_MANAGER.
+        - name: far-agent-inventory
+          image: quay.io/medik8s/fence-agents-remediation-operator:wao
+          command:
+            - sh
+            - -c
+          args:
+            - |
+              set -eu
+              out=/var/run/wao/far-agent-inventory
+              cd /usr/sbin
+              ls -1d -- fence_* > "$out/agents.txt.tmp"
+              mv "$out/agents.txt.tmp" "$out/agents.txt"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - "ALL"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: far-agent-inventory
+              mountPath: /var/run/wao/far-agent-inventory
       containers:
         - command:
             - /manager
@@ -64,6 +108,7 @@ spec:
             - --leader-elect
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=0
+            - --far-agent-inventory=/var/run/wao/far-agent-inventory/agents.txt
           # Operand images must equal repository:tag selected in operands.yaml.
           # They are not configurable through any API field.
           env:
@@ -116,7 +161,13 @@ spec:
             requests:
               cpu: 10m
               memory: 64Mi
-          volumeMounts: []
-      volumes: []
+          volumeMounts:
+            - name: far-agent-inventory
+              mountPath: /var/run/wao/far-agent-inventory
+              readOnly: true
+      volumes:
+        - name: far-agent-inventory
+          emptyDir:
+            sizeLimit: 1Mi
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

@@ -129,6 +129,11 @@ func TestIndependentTaggedImagesStayAligned(t *testing.T) {
 			if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
 				t.Errorf("%s = %s, want %s", env, got, want)
 			}
+			if env == "RELATED_IMAGE_FAR_MANAGER" {
+				if got := strings.TrimSpace(tr.run("bin/yq", farInitImageQuery, "config/manager/manager.yaml")); got != want {
+					t.Errorf("FAR inventory init container image = %s, want %s", got, want)
+				}
+			}
 			objects := string(tr.read("internal/operands/manifests/" + key + "/objects.yaml"))
 			if strings.Contains(objects, want) || !strings.Contains(objects, "__WAO_"+env+"__:placeholder") {
 				t.Errorf("%s runtime objects must carry the %s placeholder, not %s", key, env, want)
@@ -147,18 +152,100 @@ func TestImagePreflightRejectsMissingAndDuplicateDestinations(t *testing.T) {
     | select(.name == "RELATED_IMAGE_NHC_MANAGER"))`, "config/manager/manager.yaml"},
 		{"duplicate-manager", `(select(.kind == "Deployment") | .spec.template.spec.containers[0].env)
     += [{"name":"RELATED_IMAGE_NHC_MANAGER","value":"duplicate"}]`, "config/manager/manager.yaml"},
+		{"missing-far-init-container", `del(.spec.template.spec.initContainers[]?
+    | select(.name == "far-agent-inventory"))`, "config/manager/manager.yaml"},
+		{"duplicate-far-init-container", `(select(.kind == "Deployment") | .spec.template.spec.initContainers)
+    += [{"name":"far-agent-inventory","image":"duplicate"}]`, "config/manager/manager.yaml"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr := newTree(t)
 			tr.run("bin/yq", "-i", tc.query, tc.path)
+			// Change every tag, so a sync that starts before the preflight completes changes a file.
+			tr.changeTags()
 			before := tr.snapshot("config")
-			if out, err := tr.try("bash", "hack/sync-operand-images.sh"); err == nil {
-				t.Fatalf("invalid destination accepted: %s", out)
+			for _, command := range [][]string{
+				{"bash", "hack/sync-operand-images.sh"},
+				{"bash", "hack/sync-operand-images.sh", "far"},
+				{"make", "-s", "operand-manifests"},
+			} {
+				if strings.Contains(tc.name, "far") || len(command) == 2 {
+					if out, err := tr.try(command[0], command[1:]...); err == nil {
+						t.Fatalf("%v accepted an invalid destination: %s", command, out)
+					}
+				}
 			}
 			if !maps.Equal(before, tr.snapshot("config")) {
 				t.Fatal("failed sync changed image settings")
 			}
 		})
+	}
+}
+
+const farInitImageQuery = `select(.kind == "Deployment") | .spec.template.spec.initContainers[]
+ | select(.name == "far-agent-inventory") | .image`
+
+const farEnvImageQuery = `select(.kind == "Deployment") | .spec.template.spec.containers[]
+ | select(.name == "manager") | .env[] | select(.name == "RELATED_IMAGE_FAR_MANAGER") | .value`
+
+// The inventory init container and RELATED_IMAGE_FAR_MANAGER must always select the same image.
+func TestFARTagChangeUpdatesBothImageDestinations(t *testing.T) {
+	tr := newTree(t)
+	inputs := tr.loadOperands()
+	imageEntry(inputs, "far", "RELATED_IMAGE_FAR_MANAGER")["tag"] = "v9.9.9-far-test"
+	tr.saveOperands(inputs)
+	want := "quay.io/medik8s/fence-agents-remediation-operator:v9.9.9-far-test"
+	tr.run("make", "-s", "operand-manifests")
+	for name, query := range map[string]string{"env": farEnvImageQuery, "init container": farInitImageQuery} {
+		if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
+			t.Errorf("%s image = %s, want %s", name, got, want)
+		}
+	}
+	// Repeat generation changes nothing.
+	before := tr.snapshot("config", "internal")
+	tr.run("make", "-s", "operand-manifests")
+	if !maps.Equal(before, tr.snapshot("config", "internal")) {
+		t.Error("the second generation changed files")
+	}
+}
+
+// A refresh of another operand must not change either FAR destination.
+func TestOtherOperandSyncKeepsFARDestinations(t *testing.T) {
+	tr := newTree(t)
+	envBefore := strings.TrimSpace(tr.run("bin/yq", farEnvImageQuery, "config/manager/manager.yaml"))
+	inputs := tr.loadOperands()
+	imageEntry(inputs, "far", "RELATED_IMAGE_FAR_MANAGER")["tag"] = "v9.9.9-far-test"
+	imageEntry(inputs, "nhc", "RELATED_IMAGE_NHC_MANAGER")["tag"] = "v9.9.9-nhc-test"
+	tr.saveOperands(inputs)
+	tr.run("bash", "hack/sync-operand-images.sh", "nhc")
+	for name, query := range map[string]string{"env": farEnvImageQuery, "init container": farInitImageQuery} {
+		if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != envBefore {
+			t.Errorf("%s image = %s after an NHC sync, want %s", name, got, envBefore)
+		}
+	}
+	tr.run("bash", "hack/sync-operand-images.sh", "far")
+	want := "quay.io/medik8s/fence-agents-remediation-operator:v9.9.9-far-test"
+	for name, query := range map[string]string{"env": farEnvImageQuery, "init container": farInitImageQuery} {
+		if got := strings.TrimSpace(tr.run("bin/yq", query, "config/manager/manager.yaml")); got != want {
+			t.Errorf("%s image = %s after a FAR sync, want %s", name, got, want)
+		}
+	}
+}
+
+func TestVerificationRejectsMismatchedFARInitImage(t *testing.T) {
+	tr := newTree(t)
+	tr.run("bin/yq", "-i", `(select(.kind == "Deployment") | .spec.template.spec.initContainers[]
+ | select(.name == "far-agent-inventory") | .image) = "quay.io/medik8s/fence-agents-remediation-operator:other"`,
+		"config/manager/manager.yaml")
+	before := tr.snapshot("config", "internal")
+	out, err := tr.try("bash", "hack/verify-operand-manifests.sh")
+	if err == nil {
+		t.Fatalf("verification accepted a mismatched init image: %s", out)
+	}
+	if !strings.Contains(out, "far-agent-inventory") {
+		t.Errorf("the report does not name the init container: %s", out)
+	}
+	if !maps.Equal(before, tr.snapshot("config", "internal")) {
+		t.Error("verification changed the tree")
 	}
 }

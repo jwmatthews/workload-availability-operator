@@ -21,6 +21,42 @@ WAO does not contain the fence agents. Thus each WAO Pod collects a name list fr
 The manager stops if the file is missing or invalid.
 The list is a snapshot from the start of the WAO Pod. WAO does not read the file again.
 
+### Collection
+
+Each WAO Pod has an init container with the name `far-agent-inventory`. It uses the selected FAR manager image.
+The init container replaces the image entrypoint with this command:
+
+```sh
+sh -c 'set -eu
+out=/var/run/wao/far-agent-inventory
+cd /usr/sbin
+ls -1d -- fence_* > "$out/agents.txt.tmp"
+mv "$out/agents.txt.tmp" "$out/agents.txt"'
+```
+
+- The command reads directory entries only. It does not start the FAR manager, and it does not start a fence agent.
+- The command fails if no name matches. Then the manager container does not start.
+- The rename makes the final file complete or absent.
+- The init container writes to an `emptyDir` volume. The manager container mounts that volume read-only.
+- The collection occurs for each Pod start, also when FAR is `Disabled`. No FAR Deployment is necessary.
+
+### Image selection
+
+`operands.yaml` selects the FAR manager image. That selection has two destinations in `config/manager/manager.yaml`:
+
+1. The `RELATED_IMAGE_FAR_MANAGER` environment variable of the manager container.
+2. The `image` field of the `far-agent-inventory` init container.
+
+`make operand-manifests` writes the two destinations. `make verify-operand-manifests` fails if they are different.
+The init container image is a field of the WAO Deployment. An environment variable does not change it.
+A tool that replaces image references for a disconnected registry must replace the two destinations.
+The cluster service version (CSV) lists the FAR manager image in `relatedImages` one time, because the two references are the same.
+
+The image reference is `repository:tag`. A tag is mutable.
+Thus the tag can point to different content when a later WAO Pod or FAR operand Pod starts.
+Then the inventory of a WAO Pod can be different from the agents in the FAR operand Pod.
+Start the WAO Pods again after a change of the image content.
+
 ### Known differences from the FAR checker
 
 The FAR checker calls `os.Stat(filepath.Join("/usr/sbin/", agent))`.
