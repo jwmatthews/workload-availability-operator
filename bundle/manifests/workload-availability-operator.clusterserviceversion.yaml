@@ -1471,7 +1471,7 @@ spec:
             control-plane: controller-manager
           name: workload-availability-operator-controller-manager
           spec:
-            replicas: 1
+            replicas: 2
             selector:
               matchLabels:
                 app.kubernetes.io/name: workload-availability-operator
@@ -1485,11 +1485,22 @@ spec:
                   app.kubernetes.io/name: workload-availability-operator
                   control-plane: controller-manager
               spec:
+                affinity:
+                  podAntiAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                      - podAffinityTerm:
+                          labelSelector:
+                            matchLabels:
+                              app.kubernetes.io/name: workload-availability-operator
+                              control-plane: controller-manager
+                          topologyKey: kubernetes.io/hostname
+                        weight: 100
                 containers:
                   - args:
                       - --leader-elect
                       - --health-probe-bind-address=:8081
                       - --metrics-bind-address=0
+                      - --far-agent-inventory=/var/run/wao/far-agent-inventory/agents.txt
                     command:
                       - /manager
                     env:
@@ -1539,12 +1550,49 @@ spec:
                       capabilities:
                         drop:
                           - ALL
+                    volumeMounts:
+                      - mountPath: /var/run/wao/far-agent-inventory
+                        name: far-agent-inventory
+                        readOnly: true
+                initContainers:
+                  - args:
+                      - |
+                        set -eu
+                        out=/var/run/wao/far-agent-inventory
+                        cd /usr/sbin
+                        ls -1d -- fence_* > "$out/agents.txt.tmp"
+                        mv "$out/agents.txt.tmp" "$out/agents.txt"
+                    command:
+                      - sh
+                      - -c
+                    image: quay.io/medik8s/fence-agents-remediation-operator:wao
+                    name: far-agent-inventory
+                    resources:
+                      limits:
+                        cpu: 100m
+                        memory: 64Mi
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      readOnlyRootFilesystem: true
+                    volumeMounts:
+                      - mountPath: /var/run/wao/far-agent-inventory
+                        name: far-agent-inventory
                 securityContext:
                   runAsNonRoot: true
                   seccompProfile:
                     type: RuntimeDefault
                 serviceAccountName: workload-availability-operator-controller-manager
                 terminationGracePeriodSeconds: 10
+                volumes:
+                  - emptyDir:
+                      sizeLimit: 1Mi
+                    name: far-agent-inventory
       permissions:
         - rules:
             - apiGroups:

@@ -44,10 +44,15 @@ require_one() {
 }
 
 # Preflight the manager Deployment env entries before emitting records or allowing any mutation.
+# The FAR manager image has a second destination: the init container that collects the agent inventory.
 while IFS=$'\t' read -r key env repository tag; do
   export WAO_IMAGE_ENV="$env"
   require_one config/manager/manager.yaml \
     '[.[] | select(.kind == "Deployment") | .spec.template.spec.containers[] | select(.name == "manager") | .env[] | select(.name == env.WAO_IMAGE_ENV)]'
+  if [ "$env" = RELATED_IMAGE_FAR_MANAGER ]; then
+    require_one config/manager/manager.yaml \
+      '[.[] | select(.kind == "Deployment") | .spec.template.spec.initContainers[]? | select(.name == "far-agent-inventory")]'
+  fi
 done < "$work"
 while IFS=$'\t' read -r key env repository tag; do
   printf '%s\t%s:%s\n' "$env" "$repository" "$tag"
