@@ -244,6 +244,7 @@ func main() {
 
 	if err = (&controller.WorkloadAvailabilityConfigReconciler{
 		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: operatorNamespace, Images: imgs,
+		FARAdmissionReady: farwebhooks.Ready(mgr),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkloadAvailabilityConfig")
 		os.Exit(1)

@@ -3,6 +3,9 @@
 resources:
 - bases/workload-availability-operator.clusterserviceversion.yaml
 - ../default
+# The FAR admission webhooks that the WAO manager serves. operator-sdk converts them into
+# spec.webhookdefinitions of the CSV; see config/webhook/kustomization.yaml.
+- ../webhook
 - ../samples
 - ../scorecard
 # Operand RBAC, copied from each operand checkout (config/operands/<k>/config) and wrapped with

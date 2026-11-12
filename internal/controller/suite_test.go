@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -72,9 +73,15 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme, Metrics: metricsserver.Options{BindAddress: "0"}})
 	Expect(err).NotTo(HaveOccurred())
-	Expect((&WorkloadAvailabilityConfigReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: ns, Images: testImages()}).SetupWithManager(mgr)).To(Succeed())
+	Expect((&WorkloadAvailabilityConfigReconciler{
+		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: ns, Images: testImages(),
+		FARAdmissionReady: farAdmissionReady.Load,
+	}).SetupWithManager(mgr)).To(Succeed())
 	go func() { defer GinkgoRecover(); Expect(mgr.Start(ctx)).To(Succeed()) }()
 })
+
+// farAdmissionReady is the test value of the central FAR admission readiness callback.
+var farAdmissionReady atomic.Bool
 
 var _ = AfterSuite(func() {
 	cancel()

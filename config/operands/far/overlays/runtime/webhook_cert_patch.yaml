@@ -1,6 +1,7 @@
 # OpenShift service-ca wiring, which OLM would do for a standalone install. The Service asks
 # service-ca for a serving certificate in Secret fence-agents-remediation-webhook-server-cert; the
-# Deployment mounts it where controller-runtime expects it; the webhook configuration gets the CA.
+# Deployment mounts it where controller-runtime expects it. The unchanged FAR image starts its
+# webhook listener and needs these files, although no admission configuration points at it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -420,6 +420,9 @@ bundle: verify-previous-version verify-skip-range ## Generate bundle manifests a
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# LoadRestrictionsNone: config/operands/sbr/overlays/rbac lists a copied file that SBR's own kustomization omits.
 	$(KUSTOMIZE) build --load-restrictor LoadRestrictionsNone $(MANIFESTS_DIR) | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) --extra-service-accounts $(OPERAND_SERVICE_ACCOUNTS) $(BUNDLE_METADATA_OPTS)
+	# operator-sdk reads config/webhook/service.yaml to fill the CSV webhook definitions and also emits it.
+	# OLM creates the Service that the registrations use, so the bundle does not carry this one.
+	rm -f bundle/manifests/workload-availability-operator-webhook-service_v1_service.yaml
 	# bundle-update stamps replaces/skipRange/icon and runs bundle-validate.
 	$(MAKE) bundle-update
 

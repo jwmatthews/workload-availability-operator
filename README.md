@@ -204,6 +204,7 @@ removed, the operand objects it renders (not the OLM-owned RBAC). Specifically:
   node agent, operand Deployment or webhook configuration. The CRDs are installed
   regardless, because the CSV owns them (D8).
 - Disabling removes the component's webhook configurations along with the manager. A `Fail` webhook without a backend would block even deleting the component's objects, and WAO never switches a webhook to `Ignore`. While a component is disabled its objects are not validated.
+  FAR is the exception: the WAO manager serves FAR admission in each state. See [FAR admission webhooks in WAO](docs/far-webhooks.md).
 - Disable is **manager-level**. It does **not** stop what the component created
   itself: SNR's agent DaemonSet, default config, template and certificate Secret
   stay, as would SBR's agents and storage objects. WAO reports this as phase

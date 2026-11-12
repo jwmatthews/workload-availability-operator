@@ -47,6 +47,9 @@ type WorkloadAvailabilityConfigReconciler struct {
 	Scheme    *runtime.Scheme
 	Namespace string
 	Images    images.Set
+	// FARAdmissionReady reports if the local webhook listener of this replica serves FAR
+	// admission. A nil function reports false.
+	FARAdmissionReady func() bool
 }
 
 // RBAC for WAO's own objects. Operand RBAC is not created here: it is part of the WAO CSV
@@ -183,6 +186,11 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureEnabled(ctx context.Context
 		st.AdmissionReady = &ok
 		ready = ready && ok
 	}
+	if def.CentralAdmission {
+		ok := r.centralAdmissionReady()
+		st.AdmissionReady = &ok
+		ready = ready && ok
+	}
 	if ready {
 		st.Phase = v1alpha1.ComponentPhaseAvailable
 	} else {
@@ -239,6 +247,12 @@ func (r *WorkloadAvailabilityConfigReconciler) admissionReady(ctx context.Contex
 	return true, nil
 }
 
+// centralAdmissionReady reports the admission that the WAO manager serves for a component.
+// That admission does not depend on the component state.
+func (r *WorkloadAvailabilityConfigReconciler) centralAdmissionReady() bool {
+	return r.FARAdmissionReady != nil && r.FARAdmissionReady()
+}
+
 func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Context, def components.Definition) (v1alpha1.ComponentStatus, error) {
 	st := v1alpha1.ComponentStatus{Name: def.Key, DesiredState: v1alpha1.ComponentStateDisabled, Phase: v1alpha1.ComponentPhaseDisabled}
 	objs, err := operands.Render(def, r.Namespace, r.Images)
@@ -281,6 +295,10 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 	if len(def.Webhooks) > 0 {
 		st.AdmissionReady = ptr.To(false)
 		msgs = append(msgs, "admission for this component's APIs is unavailable while Disabled")
+	}
+	if def.CentralAdmission {
+		// WAO continues to serve admission for this component while it is Disabled.
+		st.AdmissionReady = ptr.To(r.centralAdmissionReady())
 	}
 	if len(msgs) > 0 {
 		st.Message = fmt.Sprint(msgs)

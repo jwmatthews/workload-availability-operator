@@ -109,6 +109,8 @@ spec:
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=0
             - --far-agent-inventory=/var/run/wao/far-agent-inventory/agents.txt
+            # OLM mounts the serving certificate of the FAR admission webhooks at this path.
+            - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
           # Operand images must equal repository:tag selected in operands.yaml.
           # They are not configurable through any API field.
           env:
@@ -134,7 +136,10 @@ spec:
               value: quay.io/medik8s/node-maintenance-operator:wao
           image: controller:latest
           name: manager
-          ports: []
+          ports:
+            - name: webhook-server
+              containerPort: 9443
+              protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

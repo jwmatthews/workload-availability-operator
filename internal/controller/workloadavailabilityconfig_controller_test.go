@@ -131,6 +131,71 @@ func setEnabled(ctx context.Context, key string, enabled bool) {
 	}).Should(Succeed())
 }
 
+// Names of the seeded FAR registrations. The central names follow the classic OLM pattern
+// <generateName>-<suffix>. The legacy names are those of a standalone FAR installation.
+var (
+	farCentralRegistrations = []string{"mfenceagentsremediation.kb.io-waotest", "vfenceagentsremediation.kb.io-waotest"}
+	farLegacyRegistrations  = []string{"fence-agents-remediation-mutating-webhook-configuration", "fence-agents-remediation-validating-webhook-configuration"}
+)
+
+// seedFARRegistrations creates registrations that WAO did not create: a central pair, as OLM
+// installs with WAO, and a foreign legacy pair. An object selector that matches no object keeps
+// them out of the envtest request path.
+func seedFARRegistrations(ctx context.Context) {
+	rules := []admissionregistrationv1.RuleWithOperations{{
+		Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+		Rule: admissionregistrationv1.Rule{APIGroups: []string{"fence-agents-remediation.medik8s.io"}, APIVersions: []string{"v1alpha1"},
+			Resources: []string{"fenceagentsremediations"}},
+	}}
+	clientConfig := admissionregistrationv1.WebhookClientConfig{Service: &admissionregistrationv1.ServiceReference{
+		Namespace: ns, Name: "workload-availability-operator-controller-manager-service", Path: ptr.To("/wao-test")}}
+	never := &metav1.LabelSelector{MatchLabels: map[string]string{"wao-test/never-matches": "true"}}
+	for _, names := range [][]string{farCentralRegistrations, farLegacyRegistrations} {
+		Expect(k8sClient.Create(ctx, &admissionregistrationv1.MutatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: names[0]},
+			Webhooks: []admissionregistrationv1.MutatingWebhook{{Name: "mfenceagentsremediation.kb.io", Rules: rules, ClientConfig: clientConfig,
+				ObjectSelector: never, FailurePolicy: ptr.To(admissionregistrationv1.Fail),
+				SideEffects: ptr.To(admissionregistrationv1.SideEffectClassNone), AdmissionReviewVersions: []string{"v1"}}},
+		})).To(Succeed())
+		Expect(k8sClient.Create(ctx, &admissionregistrationv1.ValidatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: names[1]},
+			Webhooks: []admissionregistrationv1.ValidatingWebhook{{Name: "vfenceagentsremediation.kb.io", Rules: rules, ClientConfig: clientConfig,
+				ObjectSelector: never, FailurePolicy: ptr.To(admissionregistrationv1.Fail),
+				SideEffects: ptr.To(admissionregistrationv1.SideEffectClassNone), AdmissionReviewVersions: []string{"v1"}}},
+		})).To(Succeed())
+	}
+}
+
+func farRegistrationObjects() []client.Object {
+	objs := make([]client.Object, 0, 4)
+	for _, names := range [][]string{farCentralRegistrations, farLegacyRegistrations} {
+		objs = append(objs,
+			&admissionregistrationv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: names[0]}},
+			&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: names[1]}})
+	}
+	return objs
+}
+
+// farRegistrationVersions fails if a seeded registration is absent, has an owner, or has the WAO
+// label. It returns the resource versions, so a caller can detect each write.
+func farRegistrationVersions(ctx context.Context) map[string]string {
+	versions := map[string]string{}
+	for _, o := range farRegistrationObjects() {
+		ExpectWithOffset(1, k8sClient.Get(ctx, client.ObjectKeyFromObject(o), o)).To(Succeed(), o.GetName())
+		ExpectWithOffset(1, o.GetOwnerReferences()).To(BeEmpty(), o.GetName())
+		ExpectWithOffset(1, o.GetLabels()).NotTo(HaveKey(operands.LabelManagedBy), o.GetName())
+		ExpectWithOffset(1, o.GetDeletionTimestamp()).To(BeNil(), o.GetName())
+		versions[fmt.Sprintf("%T/%s", o, o.GetName())] = o.GetResourceVersion()
+	}
+	return versions
+}
+
+func deleteFARRegistrations(ctx context.Context) {
+	for _, o := range farRegistrationObjects() {
+		Expect(k8sClient.Delete(ctx, o)).To(Succeed())
+	}
+}
+
 var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 	ctx := context.Background()
 
@@ -538,7 +603,11 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		svc := &corev1.Service{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "machine-deletion-remediation-controller-manager-metrics-service"}, svc)).To(Succeed())
 		Expect(svc.Spec.Selector).To(HaveKeyWithValue("workloadavailability.medik8s.io/component", v1alpha1.ComponentKeyMachineDeletionRemediation))
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "fence-agents-remediation-mutating-webhook-configuration"}, &admissionregistrationv1.MutatingWebhookConfiguration{})).To(Succeed())
+		// OLM installs the FAR registration with WAO. The FAR operand renders no admission configuration.
+		for _, name := range []string{"fence-agents-remediation-mutating-webhook-configuration", "fence-agents-remediation-validating-webhook-configuration"} {
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &admissionregistrationv1.MutatingWebhookConfiguration{}))).To(BeTrue(), name)
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &admissionregistrationv1.ValidatingWebhookConfiguration{}))).To(BeTrue(), name)
+		}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-maintenance-operator-validating-webhook-configuration"}, &admissionregistrationv1.ValidatingWebhookConfiguration{})).To(Succeed())
 		for _, key := range []string{v1alpha1.ComponentKeyFenceAgentsRemediation, v1alpha1.ComponentKeyMachineDeletionRemediation, v1alpha1.ComponentKeyNodeMaintenance} {
 			setEnabled(ctx, key, false)
@@ -575,7 +644,66 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		}, 90*time.Second, time.Second).Should(Succeed())
 	})
 
+	It("reports central FAR admission in each state and keeps central and foreign registrations", func() {
+		far, mdr := v1alpha1.ComponentKeyFenceAgentsRemediation, v1alpha1.ComponentKeyMachineDeletionRemediation
+		seedFARRegistrations(ctx)
+		before := farRegistrationVersions(ctx)
+
+		// Disabled FAR with a serving listener: admission is ready and there is no warning.
+		farAdmissionReady.Store(true)
+		setEnabled(ctx, mdr, true) // any spec change starts a reconcile of each component
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, far)
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisabled))
+			g.Expect(c.AdmissionReady).To(Equal(ptr.To(true)))
+			g.Expect(c.Message).NotTo(ContainSubstring("admission"))
+		}).Should(Succeed())
+
+		// Enabled FAR reports the same callback.
+		setEnabled(ctx, far, true)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, far)
+			g.Expect(c.DesiredState).To(Equal(v1alpha1.ComponentStateEnabled))
+			g.Expect(c.AdmissionReady).To(Equal(ptr.To(true)))
+		}).Should(Succeed())
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "fence-agents-remediation-controller-manager"}, &appsv1.Deployment{})).To(Succeed())
+
+		// A listener that does not serve gives false in the two states.
+		farAdmissionReady.Store(false)
+		setEnabled(ctx, mdr, false)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, far)
+			g.Expect(c.AdmissionReady).To(Equal(ptr.To(false)))
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseProgressing))
+		}).Should(Succeed())
+		setEnabled(ctx, far, false)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, far)
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisabled))
+			g.Expect(c.AdmissionReady).To(Equal(ptr.To(false)))
+			g.Expect(c.Message).NotTo(ContainSubstring("admission"))
+		}).Should(Succeed())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "fence-agents-remediation-controller-manager"}, &appsv1.Deployment{}))).To(BeTrue())
+
+		// FAR enable and disable did not change, adopt, or delete a registration.
+		Expect(farRegistrationVersions(ctx)).To(Equal(before))
+	})
+
 	It("runs the disable sequence and drops its finalizer on deletion", func() {
+		registrationsBefore := farRegistrationVersions(ctx)
+		DeferCleanup(func() {
+			// WAC deletion and finalization keep the central and the foreign registrations.
+			Expect(farRegistrationVersions(ctx)).To(Equal(registrationsBefore))
+			deleteFARRegistrations(ctx)
+		})
 		setEnabled(ctx, v1alpha1.ComponentKeyStorageBasedRemediation, true)
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "sbr-operator-controller-manager"}, &appsv1.Deployment{})
