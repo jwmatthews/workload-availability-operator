@@ -37,6 +37,8 @@ linters:
           - lll
         path: internal/*
     paths:
+      # Copied from FAR with minimal adaptation; see internal/webhooks/far/SOURCE.md.
+      - internal/webhooks/far/v1alpha1
       - third_party$
       - builtin$
       - examples$
