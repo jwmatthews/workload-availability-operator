@@ -217,3 +217,84 @@ The FAR admission tests are in three groups:
 4. Update `SOURCE.md`.
 5. Run `make manifests` and `make bundle-reset`. Review each change of the webhook definitions.
 6. Run the checks in the table.
+
+## Operation on a cluster
+
+### How to check admission
+
+Use server-side dry-run with synthetic values. Do not create a real `FenceAgentsRemediation`: a FAR manager fences the node that the object names.
+
+```yaml
+apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
+kind: FenceAgentsRemediation
+metadata:
+  name: wao-admission-check
+spec:
+  agent: fence_ipmilan
+  remediationStrategy: ResourceDeletion
+  nodeparameters:
+    --ipport:
+      worker-test: "6230"
+```
+
+```sh
+oc --kubeconfig <path> -n <test namespace> apply --dry-run=server -f far-check.yaml
+```
+
+- The field names `nodeparameters` and `sharedparameters` have no capital letters. The API server removes an unknown field such as `nodeParameters`, and then FAR reports `mandatory parameters are missing`.
+- A valid request gives `created (server dry run)`. No object stays in the cluster.
+- A request with an agent that is not in the inventory gives `unsupported fence agent: <name>`.
+
+### How to start the WAO Pods again
+
+Delete the WAO Pods one at a time. Wait for the new Pod to become ready before you delete the subsequent Pod.
+OLM owns the Deployment template, and it removes the annotation that `oc rollout restart` adds.
+
+### Certificate renewal
+
+Classic OLM makes the serving certificate and renews it before it expires. The manager loads the new files without a restart.
+Classic OLM has no supported command that starts a renewal. Do not delete the certificate Secret to simulate a renewal.
+
+### Manual transition from the six separate operators
+
+This release has no automated upgrade, adoption, migration, or rollback. Do the transition in a maintenance window:
+
+1. Make a backup of the medik8s custom resources.
+2. Uninstall all medik8s operators. Make sure that no FAR admission configuration of the old installation stays.
+3. Install WAO. All components are `Disabled`.
+4. Enable the necessary components in `workloadavailabilityconfig/cluster`.
+5. Create the custom resources again from the backup.
+
+FAR custom resources that you create in step 5 go through WAO admission. The inventory of the selected FAR image applies.
+
+## Acceptance results
+
+### Classic OLM, 2026-11-12
+
+Environment: one disposable OpenShift 5.0.0-rc.7 cluster (Kubernetes 1.36.5, amd64, 3 control plane nodes and 3 worker nodes), classic OLM, `AllNamespaces` install mode.
+The installation used `make dev-olm-deploy` from the commit that added the envtest suite. The FAR operand image was `quay.io/medik8s/fence-agents-remediation-operator:wao`, without the `--enable-webhooks` flag.
+Certificate provider: classic OLM (the Secret `workload-availability-operator-controller-manager-service-cert`, owner `ClusterServiceVersion`).
+All Secret values were synthetic. All FAR requests used server-side dry-run.
+
+| Check | Result |
+| --- | --- |
+| Install with all components `Disabled` | CSV `Succeeded`. No operand Deployment, DaemonSet, native config, policy, or remediation request. |
+| WAO replicas | 2 ready Pods on 2 different nodes. |
+| Inventory | The init container completed in each Pod. Each Pod has 31 names. The init container command reads directory entries only. |
+| Registrations | 4 entries with the table values, `failurePolicy: Fail`, CA bundle present, Service `workload-availability-operator-controller-manager-service` port 443 to container port 9443. No owner reference. The namespace selector is empty. |
+| Certificate mount | OLM mounts `tls.crt` and `tls.key` at `/tmp/k8s-webhook-server/serving-certs`. |
+| Status | `fenceAgentsRemediation`: `Disabled`, `admissionReady: true`, no message. |
+| Dry-run admission, FAR `Disabled`, no FAR Pod | 14 of 14 checks passed: valid FAR and template, unsupported agent, agent with a path, invalid action, annotation added, annotation `"false"` kept, synthetic Secret valid, invalid, and absent, legacy Secret name defaulting. No request persisted. |
+| Non-leader replica | A direct AdmissionReview to the non-leader Pod gave the correct allow and deny answers. The leader did not change. |
+| Replacement of the two WAO Pods, one at a time | 349 dry-run requests during the replacement. 348 passed. 1 failed with a TLS handshake timeout between the client and the API server, before admission. The inventory was collected again in each new Pod. The leader changed. |
+| `oc rollout restart` | OLM reverted the template change. Use Pod deletion. |
+| Deletion and creation of the `WorkloadAvailabilityConfig` | The 4 registrations stayed (same UIDs). Dry-run admission continued to operate without the object. |
+| FAR `Enabled`, unchanged FAR image | FAR became `Available` with 2 FAR Pods and a service-ca certificate. No legacy FAR admission configuration. The registrations still point at the WAO Service. 14 of 14 checks passed. |
+| FAR `Disabled` again | The FAR Deployment and Services were removed. The registrations stayed. 14 of 14 checks passed. |
+| Secret logging concern | A synthetic invalid action value from a synthetic Secret was in the log of the WAO Pod that answered the request. This agrees with the concern above. |
+| Uninstall with `make dev-olm-undeploy` | The 4 registrations were removed. A seeded foreign configuration with the legacy FAR name was unchanged. `operator-sdk cleanup --delete-all` also removed the medik8s CRDs. |
+
+Not done:
+
+- Certificate renewal on the cluster. Classic OLM has no supported control to start a renewal.
+- Upgrade, adoption, and migration. They are outside this release.
