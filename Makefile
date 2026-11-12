@@ -265,9 +265,9 @@ verify-no-changes: bundle-reset ## verify no there are no un-staged changes and 
 # Run tests
 # Use TEST_OPS to pass further options to `go test` (e.g. verbosity and/or -ginkgo.focus)
 export TEST_OPS ?=
-# Packages whose tests need the envtest API server: the reconciler, and the FAR admission
-# webhooks that the WAO manager serves.
-ENVTEST_PACKAGES := ./internal/controller/... ./internal/webhooks/far/...
+# Packages whose tests need the envtest API server: the reconciler, the FAR admission
+# webhooks that the WAO manager serves, and the built manager binary.
+ENVTEST_PACKAGES := ./internal/controller/... ./internal/webhooks/far/... ./cmd/...
 .PHONY: test
 test: test-no-verify-changes verify-no-changes ## Run tests and verify no changes
 
