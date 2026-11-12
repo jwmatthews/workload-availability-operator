@@ -152,6 +152,8 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureEnabled(ctx context.Context
 		o.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: v1alpha1.GroupVersion.String(), Kind: "WorkloadAvailabilityConfig",
 			Name: wac.Name, UID: wac.UID, Controller: ptr.To(true), BlockOwnerDeletion: ptr.To(true)}})
 		o.SetManagedFields(nil)
+		// controller-runtime v0.24 deprecates client.Apply in Patch; the dependency update keeps the apply behavior unchanged.
+		//nolint:staticcheck
 		if err := r.Patch(ctx, o, client.Apply, client.FieldOwner(FieldOwner), client.ForceOwnership); err != nil {
 			return st, fmt.Errorf("apply %s/%s: %w", o.GetKind(), o.GetName(), err)
 		}

@@ -29,7 +29,8 @@ var (
 	GroupVersion = schema.GroupVersion{Group: "workloadavailability.medik8s.io", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
-	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
+	// controller-runtime v0.24 deprecates scheme.Builder; the six operand APIs still use it.
+	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion} //nolint:staticcheck
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
