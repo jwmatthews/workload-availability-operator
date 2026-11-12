@@ -52,4 +52,4 @@ The output must show only the adaptations in the table and the import order. Fil
 
 ## WAO files in the copied package
 
-None.
+- `wao_behavior_test.go`: tests for the defaulting and validation behavior that WAO must preserve. They use a fake client and synthetic Secrets.

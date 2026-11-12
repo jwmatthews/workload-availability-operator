@@ -66,3 +66,39 @@ A fix is outside the scope of the FAR webhook work. WAO adds no logging adapter 
 
 Use only synthetic Secret values in tests and on clusters.
 Do not read, copy, or log production Secret values.
+
+## Admission behavior that WAO preserves
+
+WAO serves the same four webhook entries as standalone FAR, for `CREATE` and `UPDATE` only.
+`internal/webhooks/far/v1alpha1/wao_behavior_test.go` contains tests for each rule in this section.
+
+### Defaulting of the shared Secret name
+
+The legacy Secret name is `fence-agents-credentials-shared`. The defaulter looks for that Secret in the namespace of the admitted resource.
+A `CREATE` request has no creation timestamp. An `UPDATE` request has one.
+
+| Operation | Reference before mutation | Legacy Secret | Reference after mutation |
+| --- | --- | --- | --- |
+| CREATE | nil | exists | legacy name |
+| CREATE | nil | absent | nil |
+| UPDATE | nil | exists | nil |
+| CREATE or UPDATE | legacy name | absent | nil |
+| CREATE or UPDATE | legacy name | exists | legacy name |
+| CREATE or UPDATE | custom name | exists or absent | unchanged, no Secret read |
+| CREATE or UPDATE | pointer to an empty string | exists or absent | unchanged, no Secret read |
+| CREATE or UPDATE | nil or legacy name | read fails (Forbidden or transport error) | the request fails |
+
+### Other rules
+
+- The template defaulter adds `remediation.medik8s.io/multiple-templates-support: "true"` only when the annotation is absent. It keeps an existing value, including `"false"`.
+- A template `UPDATE` that removes the legacy Secret reference fails while the legacy Secret exists. A `FenceAgentsRemediation` `UPDATE` has no such check.
+- The `action` and `--action` parameters accept only an empty value, `reboot`, or `off`.
+- A node parameter overrides a shared parameter. A node Secret value overrides a shared Secret value.
+- A parameter name in the resource and the same name in a Secret is an error.
+- The validators render `{{.NodeName}}` in shared parameters and in shared Secret values.
+
+### Shared-only parameter condition
+
+FAR rejects a resource that has only shared parameters, or only a shared Secret, when no value contains a `{{.NodeName}}` template.
+The error is `invalid spec: mandatory parameters are missing`.
+WAO preserves this condition. A change to this condition needs a separate decision in FAR.
