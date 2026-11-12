@@ -12,6 +12,8 @@
 
 **Status:** Plan only. The dependency update, imported handlers, and full admission workflow have not been implemented or tested. The inventory experiment described below is complete.
 
+**Decisions (2026-11-12):** The agent inventory is a name-only list (Task 3). The Secret logging concern is documented only, and its fix is outside this work (Task 4). WAO runs 2 replicas (Task 7).
+
 ## Global constraints
 
 - Preserve `minKubeVersion: 1.29.0` and WAO's existing Common Expression Language (CEL) rules.
@@ -40,16 +42,15 @@
 | --- | --- | --- |
 | A | Separate dependency update | Baseline checks |
 | B | FAR source pin and compatibility decisions | A |
-| C | Local inventory, Secret protection, and handler tests | B decisions |
+| C | Local inventory, Secret logging documentation, and handler tests | B |
 | D | WAO startup, packaging, lifecycle, and envtest | C |
 | E | Basic classic OLM acceptance with FAR Disabled | D and explicit cluster authorization |
 | F | FAR disabling flag and WAO packaging cleanup | Successful E |
 | G | Desired OLM v1 checks | Required classic OLM checks |
 
-Tasks 3 and 4 contain decision gates. Neither a name-only inventory nor a specific logging fix has approval.
-The agent can complete independent work while a gate remains open. It must not activate admission with an unresolved gate.
-Record each gate result in the specified project document. Include evidence and the exact proposed decision.
-Ask the user only when the result needs a behavior change, an external source change, or a changed implementation sequence.
+Tasks 3 and 4 contain no open decision gate. The user approved a name-only inventory on 2026-11-12.
+The user also moved the Secret logging fix outside this work. Task 4 only documents that concern.
+Ask the user when a result needs a behavior change, an external source change, or a changed implementation sequence.
 
 ### Release scope
 
@@ -93,7 +94,8 @@ Do not assume that OLM preserves the two legacy operand configuration names.
 - Preserve the extra template UPDATE check for removal of the old default Secret reference while that Secret exists.
 - Preserve strategy checks, parameter rendering, parameter precedence, duplicate detection, and action rules.
 - Preserve the current shared-only parameter condition. Do not correct suspected behavior without a separate decision.
-- Match current agent checks unless an obvious error needs an explicit decision. Do not impose basename, executable, or regular-file restrictions.
+- Accept an agent only if its exact name is in the inventory. Task 3 lists the approved differences from the FAR checker.
+- Do not impose executable or regular-file restrictions.
 - Draft separate issues for desired behavior changes. Obtain approval before creating those issues.
 
 ### Startup, readiness, and lifecycle
@@ -101,6 +103,7 @@ Do not assume that OLM preserves the two legacy operand configuration names.
 - Initialize FAR admission on every WAO replica, including replicas that do not lead reconciliation.
 - Initialize imported package globals once, before concurrent requests start.
 - An invalid inventory, failed version discovery, or failed registration must stop the whole manager, even with FAR Disabled.
+- Run 2 WAO replicas. Each replica serves admission. Only the leader reconciles.
 - Missing certificates or a listener that does not serve must prevent WAO readiness.
 - Check the local webhook listener. Do not require the FAR Deployment or WAO's own Service endpoints for Pod readiness.
 - Central admission belongs to the WAO installation. It must have no `WorkloadAvailabilityConfig` owner reference.
@@ -110,7 +113,6 @@ Do not assume that OLM preserves the two legacy operand configuration names.
 ## File responsibilities
 
 These paths describe planned files. Some do not exist yet.
-Task 3 must select the collector mechanism before adding its packaging files.
 
 | File or directory | Responsibility |
 | --- | --- |
@@ -120,22 +122,18 @@ Task 3 must select the collector mechanism before adding its packaging files.
 | `internal/webhooks/far/v1alpha1/fenceagentsremediationtemplate_webhook.go` | Copied template defaulter and shared Secret defaulting |
 | `internal/webhooks/far/setup.go` | Initialize FAR package state and register both resources |
 | `internal/webhooks/far/client.go` | Construct a dedicated uncached admission client |
-| `internal/webhooks/far/inventory/inventory.go` | Load checked inventory and return an immutable agent checker |
-| `internal/webhooks/far/inventory/inventory_test.go` | Parser and lookup comparisons |
-| `internal/webhooks/far/inventory/compatibility_test.go` | Compare lookup with the imported FAR checker on Linux |
-| `internal/webhooks/far/logging_test.go` | Detect synthetic Secret disclosure through the actual logger |
+| `internal/webhooks/far/inventory/inventory.go` | Load the checked name list and return an immutable agent checker |
+| `internal/webhooks/far/inventory/inventory_test.go` | Parser and lookup tests |
 | `internal/webhooks/far/suite_test.go`, `admission_test.go` | Real registered handlers against envtest |
 | `cmd/main.go` | Scheme, discovery, inventory, client, handlers, and readiness |
 | `internal/components/far.go` | Remove operand-owned admission declarations |
 | `internal/controller/workloadavailabilityconfig_controller.go` | Report central FAR admission without changing other operands |
-| `config/manager/manager.yaml` | Inventory init container, mounts, arguments, and serving port |
+| `config/manager/manager.yaml` | 2 replicas, inventory init container, mounts, arguments, and serving port |
 | `hack/{operand-image-refs,sync-operand-images,verify-operand-manifests}.sh` | Check and synchronize both FAR image destinations |
 | `config/operands/far/overlays/runtime/` | Remove legacy registrations, then later remove unused certificate resources |
 | `config/manifests/bases/workload-availability-operator.clusterserviceversion.yaml` | Four installation-level webhook definitions |
 | `test/offline/far_admission_test.go` | Bundle rules, ownership boundary, image synchronization, and RBAC |
-| `docs/far-webhooks.md` | Contributor checks, operational behavior, installer requirements, and limitations |
-| `docs/superpowers/specs/2026-11-11-far-inventory-compatibility.md` | Task 3 decision and comparison results |
-| `docs/superpowers/specs/2026-11-11-far-secret-logging.md` | Task 4 decision and disclosure test results |
+| `docs/far-webhooks.md` | Contributor checks, operational behavior, inventory differences, Secret logging concern, and limitations |
 
 ## Task 1: Check the baseline and update dependencies separately
 
@@ -276,157 +274,106 @@ go mod verify
 
 **Acceptance:** The code imports public validation. The copied code has a short, reviewable difference from the recorded source.
 
-## Task 3: Resolve inventory compatibility before building its production lookup
+## Task 3: Build the name-only agent inventory
 
-**Files:** Create `docs/superpowers/specs/2026-11-11-far-inventory-compatibility.md`. Create comparison tests under `internal/webhooks/far/inventory/` as needed. After the decision, create `inventory.go`, its collector files, and test fixtures.
+**Files:** Create `internal/webhooks/far/inventory/inventory.go` and `inventory_test.go`. Record the known differences in `docs/far-webhooks.md`.
 
-**Consumes:** Selected FAR image and `validation.NewAgentValidator()` from the pinned module.
+**Decision (2026-11-12):** The user approved a name-only inventory. WAO accepts an agent only if its exact name is in the list.
+WAO does not reproduce FAR's `os.Stat(filepath.Join("/usr/sbin/", agent))` behavior for inputs that are not plain names.
 
-**Produces after the decision:** An immutable `validation.AgentExists` function through this WAO interface:
+**Consumes:** A name list that the init container from Task 7 writes from the selected FAR image.
 
-```go
-func Load(path, expectedImage, expectedArch string) (validation.AgentExists, error)
-```
-
-This interface does not prescribe an approved inventory format. The decision below must define that format and its collector.
-
-### Existing experiment evidence
-
-An inspection-only init container and checker probe ran locally and on a temporary OpenShift Pod.
-No FAR manager, agent, remediation, or Secret data ran in that experiment. The temporary namespace was removed and checked.
-Linux amd64 results matched between the two environments:
-
-- The image contained 31 ordinary matching names. All were executable regular files. No matching symlink existed.
-- All 31 ordinary names matched FAR's imported checker.
-- The comparison contained 332 logical cases. Of these, 328 matched the CRD pattern `fence_.+`.
-- A flat list differed in 266 cases. A Go-normalized list still differed in 49 cases.
-- Of those 49, 46 matched the CRD pattern. These included 10 existence differences and 36 error differences.
-- A pattern match is not proof of full CRD admission.
-
-These observed cases must remain in the comparison suite:
-
-| Agent input or fixture | FAR checker result |
-| --- | --- |
-| `fence_ipmilan` | true |
-| `./fence_ipmilan` | true |
-| `fence_ipmilan/` | true after Go path normalization |
-| `fence_wao_missing/../fence_ipmilan` | true |
-| `/fence_ipmilan` | true with Go `filepath.Join` behavior |
-| `/usr/sbin/fence_ipmilan` | false because the joined path repeats `usr/sbin` |
-| `fence_ipmilan/wao-child` | ENOTDIR error |
-| `fence_wao/..` | true because the resulting directory exists |
-| `fence_wao/../../bin/sh` | true because the outside path exists |
-| Input containing NUL | EINVAL error |
-| Excessive filename length | ENAMETOOLONG error |
-| Valid symlink | true |
-| Broken symlink | false |
-| Symlink loop | ELOOP error |
-| Inaccessible parent | EACCES error |
-| Non-executable regular file | true |
-| Unreadable file with stat access | true |
-
-FAR applies `os.Stat(filepath.Join("/usr/sbin/", agent))`.
-It follows symlinks and accepts directories. It returns false for nonexistence and wraps other filesystem errors.
-A static list cannot establish full equivalence for arbitrary runtime paths, such as changing `/proc` entries.
-
-- [ ] Write a Linux comparison test using the imported checker as the reference. Do not rewrite its logic as the reference.
-- [ ] Use synthetic fixtures for symlinks, permissions, file types, and errors. Run permission cases as a non-root user.
-- [ ] Check CRD acceptance separately from checker results. Record error categories and FAR's final validation messages.
-- [ ] Compare the ordinary names and every case in the table. Add actual image aliases found during collection.
-
-Use this comparison assertion inside the Linux fixture test. `candidate` is the proposed `validation.AgentExists` function.
-`agents` contains the table inputs and the fixture paths. Both checkers must see the same fixture filesystem.
+**Produces:** An immutable `validation.AgentExists` function through this WAO interface:
 
 ```go
-reference := validation.NewAgentValidator()
-for _, agent := range agents {
-    want, wantErr := reference.ValidateAgentName(agent)
-    got, gotErr := candidate(agent)
-    if got != want || (gotErr == nil) != (wantErr == nil) {
-        t.Errorf("agent %q: got (%v, %v), want (%v, %v)",
-            agent, got, gotErr, want, wantErr)
-    }
-    for _, errno := range []syscall.Errno{
-        syscall.ENOTDIR, syscall.EINVAL, syscall.ENAMETOOLONG,
-        syscall.ELOOP, syscall.EACCES,
-    } {
-        if errors.Is(gotErr, errno) != errors.Is(wantErr, errno) {
-            t.Errorf("agent %q: error category differs for %v", agent, errno)
-        }
-    }
-}
+func Load(path string) (validation.AgentExists, error)
 ```
 
-Compare complete public validation messages separately. Matching existence and error categories alone does not establish message parity.
+### Inventory format
 
-- [ ] Record what filesystem data the collector needs. Identify paths that a startup snapshot cannot represent reliably.
-- [ ] Specify the data format, format version, bounds, duplicate rules, completion marker, and atomic output method.
-- [ ] Specify image-reference and architecture fields. Do not claim that recorded text proves immutable image identity.
-- [ ] Specify the exact collector command and required tools in the selected FAR image. Check arbitrary UID and shared-volume access.
-- [ ] Specify permission checks for different init-container and FAR-manager identities.
-- [ ] Avoid copying arbitrary filesystems or collecting credentials. Inspect file metadata only within explicitly justified paths.
-- [ ] Present measured remaining differences and the proposed compatibility rule to the user before accepting changed behavior.
+- The file is UTF-8 text with one agent name on each line. Each line ends with a newline character.
+- The packaged path is `/var/run/wao/far-agent-inventory/agents.txt`.
+- Each name must match `^fence_[^/\s]+$` and contain no more than 255 bytes.
+- The file must contain between 1 and 1024 names. It must contain no duplicate names and no empty lines.
+- The file contains no image reference and no architecture. It is a snapshot from the start of the WAO Pod.
 
-**Decision gate:** Proceed only with a checked representation that meets the agreed behavior, or with an explicit approved exception.
-Do not silently reject separators, require executable files, accept every name, or switch to a running FAR Pod.
-If complete parity cannot be represented, stop dependent production work and request a concrete scope decision.
-Draft separate issues for future behavior changes. Do not create them without approval.
+### Collector command
 
-- [ ] After this gate, update this plan with the selected collector's exact files, format, command, and test fixtures.
-- [ ] Implement `Load` with the approved format. Reject missing, unreadable, malformed, truncated, incompatible, or unexpectedly empty data.
-- [ ] Return the checker only after all checks pass. Keep its data immutable while serving.
-- [ ] Test image mismatch, architecture mismatch, unknown format versions, duplicate records, and partial output.
-- [ ] Test that unsupported names and filesystem errors preserve FAR's public validation behavior.
+The init container in Task 7 runs this command. The selected FAR image uses CentOS Stream 9 and supplies `sh`, `ls`, and `mv`.
+
+```sh
+sh -c 'set -eu
+out=/var/run/wao/far-agent-inventory
+cd /usr/sbin
+ls -1d -- fence_* > "$out/agents.txt.tmp"
+mv "$out/agents.txt.tmp" "$out/agents.txt"'
+```
+
+The command fails if no name matches. The rename makes the final file complete or absent.
+The command reads directory entries only. It does not execute an agent or read file contents.
+
+### Experiment evidence
+
+An inspection-only init container ran locally and on a temporary OpenShift Pod on Linux amd64.
+The image contained 31 matching names. All were executable regular files. No matching symlink existed.
+All 31 names matched FAR's imported checker.
+
+### Known differences from the FAR checker
+
+Record this table in `docs/far-webhooks.md`. These differences are approved.
+
+| Agent input or fixture | FAR checker result | WAO result |
+| --- | --- | --- |
+| `fence_ipmilan` | true | true |
+| Name that is not in the image | false | false |
+| `./fence_ipmilan`, `fence_ipmilan/`, `/fence_ipmilan` | true | false |
+| `fence_wao_missing/../fence_ipmilan` | true | false |
+| `fence_wao/..`, `fence_wao/../../bin/sh` | true | false |
+| `/usr/sbin/fence_ipmilan` | false | false |
+| `fence_ipmilan/wao-child` | ENOTDIR error | false |
+| Input containing NUL, or excessive length | error | false |
+| Broken symlink named `fence_*` | false | true, if the image contains one |
+| Agent added to or removed from the image after Pod start | current state | state at Pod start |
+
+- [ ] Write `inventory_test.go` first. Cover each row that an offline fixture file can represent.
+- [ ] Implement `Load`. Reject a missing, unreadable, empty, or oversized file.
+- [ ] Reject an invalid name, a duplicate name, an empty line, and a file without a final newline.
+- [ ] Return the checker only after all checks pass. The checker returns `(false, nil)` for each name that is not in the list.
+- [ ] Keep the data immutable while WAO serves. Check concurrent lookups with the race detector.
+- [ ] Check that an unlisted name gives FAR's public "unsupported fence agent" validation message through the imported validator.
+- [ ] Do not add registry access or digest resolution to `make operand-manifests`. Keep all inventory tests offline.
 
 ```sh
 go test ./internal/webhooks/far/inventory -count=1
 go test -race ./internal/webhooks/far/inventory -count=1
 ```
 
-Run the compatibility suite in Linux against the selected image. Keep image inspection separate from offline generation.
-Do not add registry access or digest resolution to `make operand-manifests`.
+**Acceptance:** `Load` accepts only a complete, valid name list. The checker accepts exact listed names only. The documentation lists the known differences.
 
-**Acceptance:** A reviewed compatibility document identifies the supported behavior and evidence. The production checker meets that document.
+## Task 4: Document the Secret logging concern
 
-## Task 4: Prevent Secret disclosure before activating imported validation
-
-**Files:** Create `docs/superpowers/specs/2026-11-11-far-secret-logging.md` and `internal/webhooks/far/logging_test.go`. If selected, create `internal/webhooks/far/logging.go`. Change `cmd/main.go` only after the logging decision.
+**Files:** Add a section to `docs/far-webhooks.md`.
 
 **Tracker:** [Issue 2: Prevent FAR admission from logging Secret-derived action values](https://github.com/jwmatthews/workload-availability-operator/issues/2).
 
-FAR's `api/v1alpha1/fenceagentsremediation_params.go` contains this disclosure path:
+**Decision (2026-11-12):** A fix for this concern is outside the scope of this work. This plan adds no WAO logging adapter and no FAR logging change.
+The concern does not block admission activation.
+
+FAR's `api/v1alpha1/fenceagentsremediation_params.go` contains this log statement in `validateFenceAction`:
 
 ```go
 paramsLog.Error(err, "can't build CR with this action attribute", "action", paramVal)
 ```
 
-`paramVal` can come from a Secret. Its package logger can be captured before WAO configures logging.
-A request-context logger alone is insufficient evidence of protection.
+`paramVal` can come from a Secret. The statement runs only when the action value is not empty, `reboot`, or `off`.
+Standalone FAR writes this value to the FAR manager log. After this work, the same value appears in the WAO manager log.
 
-- [ ] Write a test that calls the imported validator with a synthetic Secret action value, such as `wao-synthetic-secret-action`.
-- [ ] Capture the actual production log sink, including errors and structured fields. Check that the unprotected path reproduces disclosure.
-- [ ] Cover Secret keys `action` and `--action`, shared Secrets, per-node Secrets, and both resource types.
-- [ ] Include malformed templates and Secret-derived template input. Check error text, warnings, and admission responses for disclosure.
-- [ ] Inspect all imported logging paths that can process Secret-derived parameters. Do not restrict the audit to one log field.
-- [ ] Investigate a WAO logging adapter that removes the unsafe data before any sink receives it.
-- [ ] Test logger initialization order, stored fields, `WithName`, `WithValues`, child loggers, verbosity, and concurrent requests.
-- [ ] Verify that the adapter still reports a useful validation failure without Secret values.
-- [ ] Record the proposed WAO adapter's filtering scope and remaining risks in the decision document.
-- [ ] If protection requires a direct FAR fix, present its exact patch and source pin for review.
+- [ ] Document the log statement, its condition, and the log that receives the value.
+- [ ] Document that WAO reads Secrets for admission with cluster-wide `get` permission.
+- [ ] Link Issue 2 as the tracker for a later fix. Do not write to the issue without approval.
+- [ ] Use only synthetic Secret values in tests and on clusters. Never read, copy, or log production Secret values.
 
-**Decision gate:** No logging fix has been selected. Do not patch vendor files or copy the public validator into WAO.
-The user prefers FAR source changes after basic WAO verification. A required earlier FAR logging fix needs an explicit sequence decision.
-Synthetic tests can continue while this gate remains open. Real Secret-backed admission must remain inactive until protection passes.
-Do not hide the blocker by testing only valid action values.
-
-- [ ] Implement the selected protection after the decision. Check that the synthetic sentinel never appears in any captured output.
-
-```sh
-go test ./internal/webhooks/far -run Secret -count=1
-go test -race ./internal/webhooks/far -run Secret -count=1
-```
-
-**Acceptance:** The actual imported handlers reject invalid synthetic actions without exposing Secret-derived data through logs or responses.
+**Acceptance:** The contributor documentation describes the concern and links its tracker.
 
 ## Task 5: Adapt defaulters and preserve validation behavior
 
@@ -483,7 +430,7 @@ func validFAR() *farapi.FenceAgentsRemediation {
 go test ./internal/webhooks/far/v1alpha1 -count=1
 ```
 
-**Acceptance:** Defaulting and validation match the pinned FAR implementation, subject only to reviewed decisions from Tasks 3 and 4.
+**Acceptance:** Defaulting and validation match the pinned FAR implementation, except for the approved inventory differences in Task 3.
 
 ## Task 6: Initialize admission and readiness in every WAO replica
 
@@ -506,8 +453,8 @@ Use package alias `farwebhooks` in `cmd/main.go`. Use `farapi` for the imported 
 Do not register FAR controllers or execute agents through these interfaces.
 
 - [ ] Register `farapi.AddToScheme(scheme)` once in WAO's scheme setup.
-- [ ] Add `--far-agent-inventory`, with packaged path `/var/run/wao/far-agent-inventory/inventory.json`.
-- [ ] Load inventory before handler registration. Compare the selected `RELATED_IMAGE_FAR_MANAGER` and `runtime.GOARCH` with available inventory metadata.
+- [ ] Add `--far-agent-inventory`, with packaged path `/var/run/wao/far-agent-inventory/agents.txt`.
+- [ ] Load inventory with `inventory.Load` before handler registration.
 - [ ] Discover strategy support through `validation.NewOutOfServiceTaintValidator(mgr.GetConfig())`.
 - [ ] Return a startup error for discovery failure. Do not default to an unsupported strategy flag and continue.
 - [ ] Construct the admission client with `client.New(cfg, client.Options{Scheme: scheme})`.
@@ -548,20 +495,23 @@ go build ./cmd/...
 
 ## Task 7: Package inventory generation and keep both FAR images synchronized
 
-**Files:** Modify `config/manager/manager.yaml`, `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh`, and `hack/verify-operand-manifests.sh`. Add tests to `test/offline/image_refs_test.go` and `pipeline_test.go`. Add the collector files selected in Task 3.
+**Files:** Modify `config/manager/manager.yaml`, `hack/operand-image-refs.sh`, `hack/sync-operand-images.sh`, and `hack/verify-operand-manifests.sh`. Add tests to `test/offline/image_refs_test.go` and `pipeline_test.go`.
 
-**Consumes:** The approved collector command and format from Task 3.
+**Consumes:** The collector command and format from Task 3.
 
-**Produces:** A WAO Pod that generates its inventory before the manager starts, even with FAR Disabled.
+**Produces:** Two WAO Pods. Each Pod generates its inventory before the manager starts, even with FAR Disabled.
+
+- [ ] Set `replicas: 2` in the WAO Deployment. Keep `--leader-elect`.
+- [ ] Add preferred Pod anti-affinity on `kubernetes.io/hostname`, so the scheduler puts the replicas on different nodes when possible.
+- [ ] Check the offline tests and the bundle for assumptions of one replica.
 
 - [ ] Add an init container named `far-agent-inventory` that uses the selected FAR manager image.
-- [ ] Override its entrypoint with the approved inspection command. Never execute `/manager` from FAR or a fence agent.
+- [ ] Override its entrypoint with the collector command from Task 3. Never execute `/manager` from FAR or a fence agent.
 - [ ] Add an `emptyDir` named `far-agent-inventory` mounted at `/var/run/wao/far-agent-inventory`.
 - [ ] Mount the output read-only in WAO. Mount it writable in the collector.
-- [ ] Use the approved complete-output protocol. A collector failure must prevent the manager container from starting.
+- [ ] A collector failure must prevent the manager container from starting.
 - [ ] Preserve restricted security settings. Check OpenShift arbitrary UIDs, directory permissions, resources, and supported architectures.
-- [ ] Record any required WAO helper binary in the Task 3 decision. Specify its staging container and executable path.
-- [ ] Do not rebuild the FAR image to add collector tools.
+- [ ] Do not rebuild the FAR image to add collector tools. Do not add a WAO helper binary.
 - [ ] Set the init image from the same `operands.yaml` selection as `RELATED_IMAGE_FAR_MANAGER`.
 - [ ] Extend image preflight to require exactly one FAR init container and one FAR manager environment entry.
 - [ ] Validate all destinations before modifying any file, including single-operand refresh commands.
@@ -684,7 +634,6 @@ Create the `far-test` namespace during suite setup. The defaulting Secret read m
 
 - [ ] Check unsupported agents and invalid strategies through admission. Check malformed objects separately through the CRD schema.
 - [ ] Check DELETE does not match the four registration rules.
-- [ ] Check the Secret sentinel never reaches logs, responses, warnings, or test output through registered handlers.
 - [ ] Stop the listener. Check requests fail with Fail policy. Do not change the policy or disable registrations to hide failures.
 - [ ] Check startup failure and certificate readiness cases from Task 6.
 - [ ] Ensure a second manager can serve handlers without holding the reconciliation leader lease.
@@ -703,7 +652,7 @@ KUBEBUILDER_ASSETS="$(bin/setup-envtest use '1.29.x!' -p path --bin-dir testbin)
 - [ ] Add required CI coverage for both `1.29` and `1.36`.
 - [ ] Check WAO's existing CEL rejection cases still reject invalid CRs on 1.29.
 - [ ] Review generated schemas for newer features unavailable on 1.29. Do not remove CEL or raise the minimum silently.
-- [ ] Run focused race tests for inventory reads, logger filtering, and non-mutating request handling.
+- [ ] Run focused race tests for inventory reads and non-mutating request handling.
 
 **Acceptance:** CI executes the real handlers and validates CRDs on both versions. Unsupported compatibility is a release blocker, not a documentation claim.
 
@@ -748,7 +697,8 @@ Apply it only with an explicit namespace and `--dry-run=server`. Never apply it 
 
 - [ ] Check an unsupported agent and invalid action fail. Check template annotation mutation succeeds.
 - [ ] Prove no request persisted after dry-run. Use local envtest for UPDATE cases that need pre-existing requests.
-- [ ] Use synthetic Secret fixtures only after Task 4 passes. Never read, copy, or log production Secret values.
+- [ ] Use synthetic Secret fixtures only. Never read, copy, or log production Secret values.
+- [ ] Check that 2 WAO replicas are ready and that each replica generated its inventory.
 - [ ] Restart WAO with FAR Disabled. Check inventory regeneration, serving readiness, and continued admission.
 - [ ] Check rolling replacement, a non-leader replica, and certificate renewal without request failures beyond the documented startup interval.
 - [ ] Use supported installer controls for renewal. Do not delete arbitrary certificate Secrets to simulate renewal.
@@ -855,7 +805,7 @@ Versioned source references:
 ## Final review and handoff checks
 
 - [ ] Check the dependency update remained an independent change.
-- [ ] Check Tasks 3 and 4 have explicit decisions and passing evidence. Do not mark unresolved gates complete.
+- [ ] Check the inventory meets Task 3. Check `docs/far-webhooks.md` contains the inventory differences and the Secret logging concern.
 - [ ] Check the FAR source pin, copy licenses, and adaptations match the recorded source.
 - [ ] Check all four paths, rules, Fail policies, and certificate interfaces match the implementation.
 - [ ] Check the new webhook suite runs in CI on Kubernetes 1.29 and 1.36.
