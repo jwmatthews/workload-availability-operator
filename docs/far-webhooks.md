@@ -250,10 +250,32 @@ oc --kubeconfig <path> -n <test namespace> apply --dry-run=server -f far-check.y
 Delete the WAO Pods one at a time. Wait for the new Pod to become ready before you delete the subsequent Pod.
 OLM owns the Deployment template, and it removes the annotation that `oc rollout restart` adds.
 
+### Certificate providers
+
+WAO has one certificate interface: the files `tls.crt` and `tls.key` in `/tmp/k8s-webhook-server/serving-certs`.
+The installer supplies the files and the CA bundle of the registrations. WAO and the FAR validation code contain no provider logic.
+
+| Installer | Certificate provider | Registration names |
+| --- | --- | --- |
+| Classic OLM (required for this release) | OLM makes a CA and a serving certificate. | `<entry name>-<suffix>` |
+| OLM v1 on OpenShift 5.0 | OpenShift service-ca, through annotations on the Service and on the registrations. | `<entry name>` |
+
+OLM v1 selects its provider with feature gates of operator-controller.
+On the tested cluster, `WebhookProviderOpenshiftServiceCA` was true and `WebhookProviderCertManager` was false.
+Those gates are installer settings. They are not WAO or FAR arguments.
+Other OLM v1 distributions, versions, and the cert-manager provider have no test evidence. Do not claim support for them.
+
 ### Certificate renewal
 
-Classic OLM makes the serving certificate and renews it before it expires. The manager loads the new files without a restart.
-Classic OLM has no supported command that starts a renewal. Do not delete the certificate Secret to simulate a renewal.
+The manager loads renewed certificate files without a restart.
+
+- Classic OLM renews the serving certificate before it expires. It has no supported command that starts a renewal. Do not delete its certificate Secret to simulate a renewal.
+- OpenShift service-ca makes a new certificate when you delete the certificate Secret of the Service. That is the OpenShift procedure for a manual rotation.
+
+### OLM v1 limits
+
+- An OLM v1 installation fails while cluster-scoped objects of a previous classic OLM installation are in the cluster. `make dev-olm-undeploy` leaves the bundle ClusterRoles and one ClusterRoleBinding. Delete them before an OLM v1 installation.
+- Do not install the package with classic OLM and with OLM v1 at the same time.
 
 ### Manual transition from the six separate operators
 
@@ -298,3 +320,21 @@ Not done:
 
 - Certificate renewal on the cluster. Classic OLM has no supported control to start a renewal.
 - Upgrade, adoption, and migration. They are outside this release.
+
+### OLM v1, 2026-11-12
+
+Environment: the same cluster, OLM v1 of OpenShift 5.0.0-rc.7 (`olm.operatorframework.io/v1`), `ClusterCatalog` and `ClusterExtension` from `config/catalog/olmv1/`, with the same `registry+v1` bundle.
+Certificate provider: OpenShift service-ca (`WebhookProviderOpenshiftServiceCA=true`, `WebhookProviderCertManager=false`).
+The FAR operand image was the published `:wao` image, without the `--enable-webhooks` flag.
+
+| Check | Result |
+| --- | --- |
+| Bundle installation | `Installed=True` after the removal of 21 ClusterRoles and 1 ClusterRoleBinding that the classic OLM uninstall left. Before that removal, the installation failed with `already exists ... cannot be managed by operator-controller`. |
+| Generated objects | The Service has service-ca serving certificate annotations. The 4 registrations have the entry names as object names, the `inject-cabundle` annotation, a CA bundle, and `failurePolicy: Fail`. |
+| Certificate mount | `tls.crt` and `tls.key` at `/tmp/k8s-webhook-server/serving-certs`, the same interface as classic OLM. |
+| All components `Disabled` | 2 ready WAO Pods on 2 nodes, 31 inventory names in each Pod, `admissionReady: true`. 14 of 14 dry-run checks passed. |
+| Certificate renewal | The certificate Secret was deleted. service-ca made a new Secret in 1 second. The two replicas served a new certificate in less than 1 minute, with no Pod restart. 589 of 589 dry-run requests passed during the renewal. |
+| FAR `Enabled`, then `Disabled`, then deletion of the `WorkloadAvailabilityConfig` | The registrations stayed (same UIDs). 14 of 14 dry-run checks passed in each state. |
+| Uninstall (deletion of the `ClusterExtension`) | The 4 registrations, the CRDs, and the cluster-scoped RBAC objects were removed. |
+
+Not done under OLM v1: the cert-manager provider, other OLM v1 versions, and FAR with `--enable-webhooks=false`.
