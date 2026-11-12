@@ -265,13 +265,26 @@ verify-no-changes: bundle-reset ## verify no there are no un-staged changes and 
 # Run tests
 # Use TEST_OPS to pass further options to `go test` (e.g. verbosity and/or -ginkgo.focus)
 export TEST_OPS ?=
+# Packages whose tests need the envtest API server: the reconciler, and the FAR admission
+# webhooks that the WAO manager serves.
+ENVTEST_PACKAGES := ./internal/controller/... ./internal/webhooks/far/...
 .PHONY: test
 test: test-no-verify-changes verify-no-changes ## Run tests and verify no changes
 
 .PHONY: test-no-verify-changes
 test-no-verify-changes: go-verify manifests generate fmt vet test-imports envtest ## Generate and format code, run tests, generate manifests and bundle
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(PROJECT_DIR)/testbin)" \
-	go test ./internal/controller/... -coverprofile cover.out ${TEST_OPS}
+	go test $(ENVTEST_PACKAGES) -coverprofile cover.out ${TEST_OPS}
+
+# Run the envtest suites on one Kubernetes version, for example the CSV minimum:
+#   make test-envtest ENVTEST_K8S_VERSION=1.29
+# The second run uses the race detector on FAR admission, which serves concurrent requests.
+.PHONY: test-envtest
+test-envtest: envtest ## Run the envtest suites on ENVTEST_K8S_VERSION, then FAR admission with the race detector.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(PROJECT_DIR)/testbin)" \
+	go test $(ENVTEST_PACKAGES) -count=1 ${TEST_OPS}
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(PROJECT_DIR)/testbin)" \
+	go test -race ./internal/webhooks/far/... -count=1
 
 .PHONY: e2e-test
 e2e-test: ## Run end to end tests against an already deployed operator
