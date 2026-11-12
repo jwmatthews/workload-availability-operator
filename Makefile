@@ -15,7 +15,7 @@ OPERATOR_SDK_VERSION ?= v1.42.2
 OPM_VERSION = v1.66.0
 
 # CONTROLLER_GEN versions at https://github.com/kubernetes-sigs/controller-tools/releases
-CONTROLLER_GEN_VERSION = v0.20.1
+CONTROLLER_GEN_VERSION = v0.21.0
 
 # KUSTOMIZE versions at https://github.com/kubernetes-sigs/kustomize/releases
 # note: update KUSTOMIZE_VERSION and KUSTOMIZE_API_VERSION accordingly.
@@ -23,10 +23,10 @@ KUSTOMIZE_API_VERSION = v5
 KUSTOMIZE_VERSION = v5.8.1
 
 # https://pkg.go.dev/sigs.k8s.io/controller-runtime/tools/setup-envtest/env?tab=versions
-ENVTEST_VERSION = v0.0.0-20260120065648-aebc15d7c689
+ENVTEST_VERSION = v0.24.1
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.34
+ENVTEST_K8S_VERSION = 1.36
 
 # GoImports versions at https://pkg.go.dev/golang.org/x/tools/cmd/goimports?tab=versions
 GOIMPORTS_VERSION ?= v0.44.0
@@ -36,7 +36,7 @@ SORT_IMPORTS_VERSION = v0.3.0
 
 # golangci-lint versions at https://github.com/golangci/golangci-lint/releases
 # Keep in sync with .github/workflows/lint.yml.
-GOLANGCI_LINT_VERSION = v2.1.0
+GOLANGCI_LINT_VERSION = v2.9.0
 
 # update for major version updates to YQ_VERSION! see https://github.com/mikefarah/yq
 YQ_API_VERSION = v4
@@ -240,9 +240,9 @@ fix-imports: sort-imports ## Sort imports
 
 # golangci-lint type-checks with the Go toolchain it runs under. A host Go newer
 # than go.mod reports spurious "undefined" typecheck errors, so pin the
-# toolchain to the go.mod version. CI (.github/workflows/lint.yml) sets up Go
-# from go.mod and runs the same golangci-lint version over the whole module.
-LINT_GOTOOLCHAIN ?= go$(shell go list -m -f '{{.GoVersion}}')
+# toolchain to the go.mod toolchain directive. CI (.github/workflows/lint.yml)
+# sets up that Go version and runs the same golangci-lint version over the whole module.
+LINT_GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain //p' go.mod)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint the way CI does (.golangci.yml, whole module)

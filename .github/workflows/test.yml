@@ -15,7 +15,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "1.26.5"
+
+      - name: Check the selected Go toolchain
+        run: hack/verify-go-toolchain.sh
 
       - name: Prepare Go dependencies
         run: go mod download
