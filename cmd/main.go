@@ -75,6 +75,7 @@ func main() {
 	var metricsCertPath, metricsCertName, metricsCertKey string
 	var webhookCertPath, webhookCertName, webhookCertKey string
 	var farAgentInventory string
+	var webhookPort int
 	var enableLeaderElection bool
 	var probeAddr string
 	var secureMetrics bool
@@ -89,6 +90,7 @@ func main() {
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
+	flag.IntVar(&webhookPort, "webhook-port", webhook.DefaultPort, "The port of the webhook server.")
 	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
 	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
@@ -161,6 +163,7 @@ func main() {
 
 	// An empty CertDir selects the controller-runtime default directory.
 	webhookServer := webhook.NewServer(webhook.Options{
+		Port:    webhookPort,
 		CertDir: webhookCertPath,
 		TLSOpts: webhookTLSOpts,
 	})
