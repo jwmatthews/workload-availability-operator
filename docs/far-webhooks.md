@@ -4,6 +4,51 @@ The WAO manager serves the admission webhooks of Fence Agents Remediation (FAR).
 The webhooks operate when the FAR operand is `Disabled` and when it is `Enabled`.
 [SOURCE.md](../internal/webhooks/far/SOURCE.md) records the FAR source pin and the copied files.
 
+## Admission entries
+
+All entries use group `fence-agents-remediation.medik8s.io`, version `v1alpha1`, operations `CREATE` and `UPDATE`, `failurePolicy: Fail`, `sideEffects: None`, and AdmissionReview `v1`.
+There is no `DELETE` entry.
+
+| Entry name | Type | Resource | Path |
+| --- | --- | --- | --- |
+| `mfenceagentsremediation.kb.io` | Mutating | `fenceagentsremediations` | `/mutate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation` |
+| `vfenceagentsremediation.kb.io` | Validating | `fenceagentsremediations` | `/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation` |
+| `mfenceagentsremediationtemplate.kb.io` | Mutating | `fenceagentsremediationtemplates` | `/mutate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediationtemplate` |
+| `vfenceagentsremediationtemplate.kb.io` | Validating | `fenceagentsremediationtemplates` | `/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediationtemplate` |
+
+Classic OLM gives the admission configurations generated names. Find an entry by its entry name and rules, not by the configuration name.
+
+## Registration and ownership
+
+The registration is part of the WAO installation. It is not an operand object.
+
+1. The Kubebuilder markers in `internal/webhooks/far/v1alpha1/` are the source of the four entries.
+2. `make manifests` writes `config/webhook/manifests.yaml` from the markers.
+3. `make bundle-reset` gives that file to operator-sdk, which writes four `spec.webhookdefinitions` entries into the bundle CSV.
+4. Classic OLM creates the webhook Service, the serving certificate, the certificate mount and the admission configurations.
+
+- Do not add webhook definitions to the base CSV. Bundle generation does not use them.
+- Do not change `failurePolicy`. A request must fail when no WAO replica can answer.
+- The definitions point at the WAO Deployment `workload-availability-operator-controller-manager`, container port 9443.
+- OLM mounts the certificate at `/tmp/k8s-webhook-server/serving-certs` as `tls.crt` and `tls.key`. The manager argument `--webhook-cert-path` selects that directory. The manager loads a renewed certificate without a restart.
+- WAO does not apply, own, or delete the registration. The registration has no `WorkloadAvailabilityConfig` owner reference.
+- The FAR operand renders no admission configuration. `config/operands/far/overlays/runtime/` deletes the two FAR configurations from the runtime objects.
+- WAO does not adopt or delete an admission configuration that a different installer created. A cluster must not have a standalone FAR installation together with WAO.
+
+## Startup, readiness and lifecycle
+
+- The Deployment has 2 replicas. Each replica serves admission. Only the leader reconciles.
+- Each replica does these steps before it serves:
+  1. Load the agent inventory.
+  2. Discover the Kubernetes version for the `OutOfServiceTaint` strategy check.
+  3. Make the dedicated client.
+  4. Register the four handlers.
+- A failure of a step stops the manager, also when FAR is `Disabled`. The manager does not continue with an assumed value.
+- The readiness check `far-admission` uses the local webhook listener of the Pod. It does not use the FAR Deployment or the WAO Service endpoints. A Pod without a serving certificate or without a serving listener is not ready.
+- The `admissionReady` status of `fenceAgentsRemediation` shows the local listener of the leader replica, in the `Enabled` state and in the `Disabled` state.
+- FAR enable, FAR disable, and deletion of the `WorkloadAvailabilityConfig` do not remove the registration.
+- An uninstall of WAO removes the registration, because OLM owns it through the CSV.
+
 ## Agent inventory
 
 FAR admission accepts a fence agent only if the agent is in the selected FAR image.

@@ -1,6 +1,8 @@
 package components_test
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -118,6 +120,33 @@ func TestSNRAndSBRDeclareAgentOwners(t *testing.T) {
 	}
 	if len(nhc.AgentOwners) != 0 {
 		t.Errorf("NHC has no agents, got %+v", nhc.AgentOwners)
+	}
+}
+
+// The WAO manager serves FAR admission. OLM installs its registration with WAO, so the FAR
+// operand renders no admission configuration. The other operands keep their own webhooks.
+func TestFARAdmissionIsCentral(t *testing.T) {
+	wantWebhooks := map[string]int{
+		v1alpha1.ComponentKeyNodeHealthCheck: 1, v1alpha1.ComponentKeySelfNodeRemediation: 2,
+		v1alpha1.ComponentKeyStorageBasedRemediation: 0, v1alpha1.ComponentKeyFenceAgentsRemediation: 0,
+		v1alpha1.ComponentKeyMachineDeletionRemediation: 0, v1alpha1.ComponentKeyNodeMaintenance: 1,
+	}
+	for _, d := range components.All() {
+		if len(d.Webhooks) != wantWebhooks[d.Key] {
+			t.Errorf("%s declares %d webhook configurations, want %d", d.Key, len(d.Webhooks), wantWebhooks[d.Key])
+		}
+		if wantCentral := d.Key == v1alpha1.ComponentKeyFenceAgentsRemediation; d.CentralAdmission != wantCentral {
+			t.Errorf("%s CentralAdmission = %v, want %v", d.Key, d.CentralAdmission, wantCentral)
+		}
+		data, err := os.ReadFile(filepath.Join("..", "operands", "manifests", d.ManifestDir, "objects.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		rendered := strings.Count(string(data), "kind: ValidatingWebhookConfiguration\n") +
+			strings.Count(string(data), "kind: MutatingWebhookConfiguration\n")
+		if rendered != wantWebhooks[d.Key] {
+			t.Errorf("%s runtime manifests contain %d admission configurations, want %d", d.Key, rendered, wantWebhooks[d.Key])
+		}
 	}
 }
 
