@@ -58,3 +58,34 @@ func TestLinterVersionMatchesCI(t *testing.T) {
 		t.Errorf("golangci-lint: Makefile %s, CI %s", local, ci)
 	}
 }
+
+// The FAR admission suite must be part of the normal test target, and CI must run the
+// envtest suites on the minimum Kubernetes version and on the default version.
+func TestEnvtestSuitesRunLocallyAndInCI(t *testing.T) {
+	makefile := readRepoFile(t, "Makefile")
+	packages := firstMatch(t, makefile, `(?m)^ENVTEST_PACKAGES := (.*)$`, "ENVTEST_PACKAGES")
+	for _, pkg := range []string{"./internal/controller/...", "./internal/webhooks/far/..."} {
+		if !strings.Contains(packages, pkg) {
+			t.Errorf("ENVTEST_PACKAGES %q does not contain %s", packages, pkg)
+		}
+	}
+	for _, target := range []string{"test-no-verify-changes", "test-envtest"} {
+		recipe := firstMatch(t, makefile, `(?m)^`+target+`:.*\n((?:\t.*\n)+)`, target)
+		if !strings.Contains(recipe, "go test $(ENVTEST_PACKAGES)") {
+			t.Errorf("%s does not test $(ENVTEST_PACKAGES): %s", target, recipe)
+		}
+	}
+	defaultVersion := firstMatch(t, makefile, `(?m)^ENVTEST_K8S_VERSION = (\S+)$`, "ENVTEST_K8S_VERSION")
+	minVersion := strings.TrimSuffix(firstMatch(t, readRepoFile(t, "config/manifests/bases/"+waoCSVFile),
+		`(?m)^\s+minKubeVersion: (\S+)$`, "minKubeVersion"), ".0")
+	workflow := readRepoFile(t, ".github/workflows/test.yml")
+	matrix := firstMatch(t, workflow, `(?m)^\s+kubernetes: \[(.*)\]$`, "test.yml Kubernetes matrix")
+	for _, version := range []string{minVersion, defaultVersion} {
+		if !strings.Contains(matrix, `"`+version+`"`) {
+			t.Errorf("the CI matrix [%s] does not contain Kubernetes %s", matrix, version)
+		}
+	}
+	if !strings.Contains(workflow, "make test-envtest ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}") {
+		t.Error("CI does not run make test-envtest for each matrix version")
+	}
+}

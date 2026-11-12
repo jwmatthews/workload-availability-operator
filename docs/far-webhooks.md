@@ -183,3 +183,37 @@ A `CREATE` request has no creation timestamp. An `UPDATE` request has one.
 FAR rejects a resource that has only shared parameters, or only a shared Secret, when no value contains a `{{.NodeName}}` template.
 The error is `invalid spec: mandatory parameters are missing`.
 WAO preserves this condition. A change to this condition needs a separate decision in FAR.
+
+## Contributor checks
+
+| Command | What it checks |
+| --- | --- |
+| `make check` | Lint, import order, and operand manifest consistency, including the two FAR image destinations. |
+| `make test-offline` | Bundle webhook definitions, the WAO Deployment (replicas, init container, mounts), the Secret permission, and image synchronization. |
+| `make test` | The reconciler suite and the FAR admission suites on the default Kubernetes version. The tree must be clean. |
+| `make test-envtest ENVTEST_K8S_VERSION=1.29` | The same envtest suites on Kubernetes 1.29, the CSV minimum, then FAR admission with the race detector. |
+
+CI runs the envtest suites on Kubernetes 1.29 and on the default version.
+
+The FAR admission tests are in three groups:
+
+- `internal/webhooks/far/inventory`: the inventory parser and the name lookup.
+- `internal/webhooks/far/v1alpha1`: the FAR tests for the copied files, and the WAO behavior tests.
+- `internal/webhooks/far`: startup errors, readiness, and `TestAdmissionThroughAPIServer`.
+  That test sends requests through an envtest API server to the four registered handlers.
+  It also checks a second replica without the leader lease, and the `Fail` policy when no listener serves.
+
+### How to update a dependency
+
+1. Update the Go toolchain, controller-runtime, and the Kubernetes modules in a change that has no FAR change.
+2. Keep `go.mod`, the `Dockerfile`, and the two CI workflows on the same Go toolchain. `test/offline` checks this.
+3. Run the checks in the table on Kubernetes 1.29 and on the default version.
+
+### How to update the FAR source pin
+
+1. Select a FAR revision that the Go module proxy can resolve. Do not add a `replace` directive with a local path.
+2. Run `go get github.com/medik8s/fence-agents-remediation/v5@<revision>`, then `go mod tidy`.
+3. Copy the two webhook files and their tests again. Apply the adaptations that [SOURCE.md](../internal/webhooks/far/SOURCE.md) lists.
+4. Update `SOURCE.md`.
+5. Run `make manifests` and `make bundle-reset`. Review each change of the webhook definitions.
+6. Run the checks in the table.
