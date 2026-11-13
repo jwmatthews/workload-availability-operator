@@ -84,6 +84,22 @@ strip_finalizers() {
     done || true
 }
 
+# Remove the remediation status from every NodeHealthCheck. The NHC webhook, which the WAO manager
+# serves, rejects the delete of a NodeHealthCheck whose status shows a remediation. No controller
+# removes that status while NHC is Disabled. The webhook does not validate the status subresource.
+# See docs/nhc-webhooks.md.
+clear_nhc_remediation_status() {
+  local name
+  oc get nodehealthchecks.remediation.medik8s.io --ignore-not-found \
+    -o jsonpath='{range .items[?(@.status.unhealthyNodes)]}{.metadata.name}{"\n"}{end}' 2>/dev/null |
+    while read -r name; do
+      [ -n "$name" ] || continue
+      echo "  removing status.unhealthyNodes from NodeHealthCheck $name"
+      oc patch nodehealthchecks.remediation.medik8s.io "$name" --subresource=status --type merge \
+        -p '{"status":{"unhealthyNodes":null}}' >/dev/null || true
+    done || true
+}
+
 # ---------------------------------------------------------------------------------------------
 # Preflight
 # ---------------------------------------------------------------------------------------------
@@ -104,6 +120,7 @@ step "1. Deleting operand custom resources in all namespaces"
 for crd in "${OPERAND_CRDS[@]}"; do
   crd_exists "$crd" || continue
   echo "  $crd"
+  [ "$crd" != nodehealthchecks.remediation.medik8s.io ] || clear_nhc_remediation_status
   oc delete "$crd" --all -A --ignore-not-found --timeout=120s ||
     warn "could not delete all $crd (finalizers are cleared in step 4)"
 done
