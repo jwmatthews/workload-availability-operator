@@ -59,12 +59,12 @@ func TestLinterVersionMatchesCI(t *testing.T) {
 	}
 }
 
-// The FAR admission suite must be part of the normal test target, and CI must run the
+// The admission suites of all components must be part of the normal test target, and CI must run the
 // envtest suites on the minimum Kubernetes version and on the default version.
 func TestEnvtestSuitesRunLocallyAndInCI(t *testing.T) {
 	makefile := readRepoFile(t, "Makefile")
 	packages := firstMatch(t, makefile, `(?m)^ENVTEST_PACKAGES := (.*)$`, "ENVTEST_PACKAGES")
-	for _, pkg := range []string{"./internal/controller/...", "./internal/webhooks/far/..."} {
+	for _, pkg := range []string{"./internal/controller/...", "./internal/webhooks/..."} {
 		if !strings.Contains(packages, pkg) {
 			t.Errorf("ENVTEST_PACKAGES %q does not contain %s", packages, pkg)
 		}

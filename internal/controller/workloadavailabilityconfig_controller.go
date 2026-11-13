@@ -47,9 +47,9 @@ type WorkloadAvailabilityConfigReconciler struct {
 	Scheme    *runtime.Scheme
 	Namespace string
 	Images    images.Set
-	// FARAdmissionReady reports if the local webhook listener of this replica serves FAR
-	// admission. A nil function reports false.
-	FARAdmissionReady func() bool
+	// CentralAdmissionReady reports if the local webhook listener of this replica serves the
+	// admission of the components with CentralAdmission. A nil function reports false.
+	CentralAdmissionReady func() bool
 }
 
 // RBAC for WAO's own objects. Operand RBAC is not created here: it is part of the WAO CSV
@@ -250,7 +250,7 @@ func (r *WorkloadAvailabilityConfigReconciler) admissionReady(ctx context.Contex
 // centralAdmissionReady reports the admission that the WAO manager serves for a component.
 // That admission does not depend on the component state.
 func (r *WorkloadAvailabilityConfigReconciler) centralAdmissionReady() bool {
-	return r.FARAdmissionReady != nil && r.FARAdmissionReady()
+	return r.CentralAdmissionReady != nil && r.CentralAdmissionReady()
 }
 
 func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Context, def components.Definition) (v1alpha1.ComponentStatus, error) {

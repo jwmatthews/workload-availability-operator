@@ -650,7 +650,7 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		before := farRegistrationVersions(ctx)
 
 		// Disabled FAR with a serving listener: admission is ready and there is no warning.
-		farAdmissionReady.Store(true)
+		listenerReady.Store(true)
 		setEnabled(ctx, mdr, true) // any spec change starts a reconcile of each component
 		Eventually(func(g Gomega) {
 			w := getWAC(ctx)
@@ -673,7 +673,7 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "fence-agents-remediation-controller-manager"}, &appsv1.Deployment{})).To(Succeed())
 
 		// A listener that does not serve gives false in the two states.
-		farAdmissionReady.Store(false)
+		listenerReady.Store(false)
 		setEnabled(ctx, mdr, false)
 		Eventually(func(g Gomega) {
 			w := getWAC(ctx)

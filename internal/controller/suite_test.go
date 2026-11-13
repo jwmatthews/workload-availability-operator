@@ -75,13 +75,13 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect((&WorkloadAvailabilityConfigReconciler{
 		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: ns, Images: testImages(),
-		FARAdmissionReady: farAdmissionReady.Load,
+		CentralAdmissionReady: listenerReady.Load,
 	}).SetupWithManager(mgr)).To(Succeed())
 	go func() { defer GinkgoRecover(); Expect(mgr.Start(ctx)).To(Succeed()) }()
 })
 
-// farAdmissionReady is the test value of the central FAR admission readiness callback.
-var farAdmissionReady atomic.Bool
+// listenerReady is the test value of the central admission readiness callback.
+var listenerReady atomic.Bool
 
 var _ = AfterSuite(func() {
 	cancel()

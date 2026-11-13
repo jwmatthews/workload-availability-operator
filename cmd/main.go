@@ -51,6 +51,7 @@ import (
 	"github.com/medik8s/workload-availability-operator/internal/controller"
 	"github.com/medik8s/workload-availability-operator/internal/images"
 	farwebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/far"
+	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
 	"github.com/medik8s/workload-availability-operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -247,7 +248,7 @@ func main() {
 
 	if err = (&controller.WorkloadAvailabilityConfigReconciler{
 		Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: operatorNamespace, Images: imgs,
-		FARAdmissionReady: farwebhooks.Ready(mgr),
+		CentralAdmissionReady: listener.Ready(mgr),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkloadAvailabilityConfig")
 		os.Exit(1)
@@ -268,6 +269,11 @@ func main() {
 	// Thus this registration is not behind leader election or operand state. Each failure stops the manager.
 	if err = farwebhooks.Initialize(mgr, farAgentInventory); err != nil {
 		setupLog.Error(err, "unable to initialize FAR admission")
+		os.Exit(1)
+	}
+	// One listener in each replica serves the admission of all components. The Pod is ready only when it serves.
+	if err = listener.AddReadyCheck(mgr); err != nil {
+		setupLog.Error(err, "unable to add the admission readiness check")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

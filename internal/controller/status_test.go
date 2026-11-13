@@ -76,12 +76,12 @@ func TestSummarizeKeepsTransitionTimeWhenUnchanged(t *testing.T) {
 	}
 }
 
-// Without an injected callback, central FAR admission is not ready.
+// Without an injected callback, central admission is not ready.
 func TestCentralAdmissionReadyDefaultsToFalse(t *testing.T) {
 	if (&WorkloadAvailabilityConfigReconciler{}).centralAdmissionReady() {
-		t.Error("a nil FARAdmissionReady function reports ready")
+		t.Error("a nil CentralAdmissionReady function reports ready")
 	}
-	ready := &WorkloadAvailabilityConfigReconciler{FARAdmissionReady: func() bool { return true }}
+	ready := &WorkloadAvailabilityConfigReconciler{CentralAdmissionReady: func() bool { return true }}
 	if !ready.centralAdmissionReady() {
 		t.Error("the injected function is not used")
 	}

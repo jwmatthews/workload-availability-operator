@@ -15,6 +15,7 @@ import (
 
 	"github.com/medik8s/workload-availability-operator/internal/webhooks/far/inventory"
 	farwebhookv1alpha1 "github.com/medik8s/workload-availability-operator/internal/webhooks/far/v1alpha1"
+	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
 )
 
 // FAR admission reads the Secrets that hold fence agent parameters, in any namespace.
@@ -57,6 +58,7 @@ func SetupWithManager(mgr ctrl.Manager, opts Options) error {
 }
 
 // Initialize prepares all inputs of FAR admission and registers the webhooks.
+// The readiness check of the shared listener is not part of this function; see the listener package.
 // Each failure is a startup error: the caller must stop the manager, also when FAR is Disabled.
 func Initialize(mgr ctrl.Manager, inventoryPath string) error {
 	if mgr == nil {
@@ -71,29 +73,13 @@ func Initialize(mgr ctrl.Manager, inventoryPath string) error {
 	if err != nil {
 		return fmt.Errorf("FAR admission: discover the Kubernetes version: %w", err)
 	}
-	admissionClient, err := NewAdmissionClient(mgr.GetConfig(), mgr.GetScheme())
+	admissionClient, err := listener.NewAdmissionClient(mgr.GetConfig(), mgr.GetScheme())
 	if err != nil {
 		return err
 	}
-	if err := SetupWithManager(mgr, Options{
+	return SetupWithManager(mgr, Options{
 		AgentExists:                agentExists,
 		AdmissionClient:            admissionClient,
 		OutOfServiceTaintSupported: taintValidator.IsOutOfServiceTaintSupported(),
-	}); err != nil {
-		return err
-	}
-	// The check uses only the local listener. It does not use the FAR Deployment or the WAO Service endpoints.
-	if err := mgr.AddReadyzCheck(ReadyCheckName, mgr.GetWebhookServer().StartedChecker()); err != nil {
-		return fmt.Errorf("FAR admission: add the readiness check: %w", err)
-	}
-	return nil
-}
-
-// ReadyCheckName is the name of the readiness check of the local webhook listener.
-const ReadyCheckName = "far-admission"
-
-// Ready returns a function that reports if the local webhook listener of this replica serves.
-func Ready(mgr ctrl.Manager) func() bool {
-	check := mgr.GetWebhookServer().StartedChecker()
-	return func() bool { return check(nil) == nil }
+	})
 }
