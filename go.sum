@@ -20,8 +20,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/emicklei/go-restful/v3 v3.13.0 h1:C4Bl2xDndpU6nJ4bc1jXd+uTmYPVUwkD6bFY/oTyCes=
 github.com/emicklei/go-restful/v3 v3.13.0/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
-github.com/evanphx/json-patch v4.12.0+incompatible h1:4onqiflcdA9EOZ4RxV643DvftH5pOlLGNtQ5lPWQu84=
-github.com/evanphx/json-patch v4.12.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
+github.com/evanphx/json-patch v5.6.0+incompatible h1:jBYDEEiFBPxA0v50tFdvOzQQTCvpL6mnFh5mB2/l16U=
+github.com/evanphx/json-patch v5.6.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/evanphx/json-patch/v5 v5.9.11 h1:/8HVnzMq13/3x9TPvjG08wUGqBTmZBsCWzjTM0wiaDU=
 github.com/evanphx/json-patch/v5 v5.9.11/go.mod h1:3j+LviiESTElxA4p3EMKAB9HXj3/XEtnUf6OZxqIQTM=
 github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeORc=
@@ -127,6 +127,8 @@ github.com/medik8s/fence-agents-remediation/v5 v5.0.0-20261103000740-58e8107d32e
 github.com/medik8s/fence-agents-remediation/v5 v5.0.0-20261103000740-58e8107d32e5/go.mod h1:pUQRLeDVUEnTS7qpluquQNCG6fc8dYjR9YXTE9wCYL4=
 github.com/medik8s/node-healthcheck-operator/v5 v5.0.0-20261103000740-8b326d3acfe5 h1:p+QbfAAbbXBMA2EMZw/N7EcjZ4pJGxCME3djgxYv7tg=
 github.com/medik8s/node-healthcheck-operator/v5 v5.0.0-20261103000740-8b326d3acfe5/go.mod h1:v07EQWBtzCeO0yy0Ze3XNb0kYZlXAxhdOdwKMS6S+No=
+github.com/medik8s/node-maintenance-operator/v5 v5.0.0-20261013171824-5baa709167a2 h1:0kA32yegD8APutUExE88dVS01V+Yddxh1k+sFeYmJfE=
+github.com/medik8s/node-maintenance-operator/v5 v5.0.0-20261013171824-5baa709167a2/go.mod h1:W4T97JY9EiSiVDhGFrVJHG+kkWEMgIpQUOev/TsZLSg=
 github.com/mfridman/tparse v0.18.0 h1:wh6dzOKaIwkUGyKgOntDW4liXSo37qg5AXbIhkMV3vE=
 github.com/mfridman/tparse v0.18.0/go.mod h1:gEvqZTuCgEhPbYk/2lS3Kcxg1GmTxxU7kTC8DvP0i/A=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=

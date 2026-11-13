@@ -40,7 +40,7 @@ func csvWebhookDefinitions(t *testing.T) []map[string]any {
 // Each marker of the copied operand files has one CSV definition, and the CSV has no other definition.
 func TestCSVHasOneWebhookDefinitionForEachMarker(t *testing.T) {
 	markers := markerEntries(t)
-	want := len(farAdmissionTable) + len(nhcAdmissionTable)
+	want := len(farAdmissionTable) + len(nhcAdmissionTable) + len(nmoAdmissionTable)
 	if len(markers) != want {
 		t.Fatalf("the copied operand files have %d webhook markers, want %d", len(markers), want)
 	}
@@ -77,6 +77,14 @@ func TestNHCCSVHasOneCentralWebhookDefinition(t *testing.T) {
 		t.Errorf("marker entry differs from the table:\n got %+v\nwant %+v", marker, want)
 	}
 
+	checkCSVDefinition(t, want, "NHC")
+}
+
+// checkCSVDefinition checks that the bundle CSV has exactly one definition with the name of want,
+// that it agrees with want, and that it points at the WAO Deployment.
+func checkCSVDefinition(t *testing.T, want webhookEntry, operand string) {
+	t.Helper()
+	name := want.Name
 	count := 0
 	for _, d := range csvWebhookDefinitions(t) {
 		if d["generateName"] != name {
@@ -107,7 +115,7 @@ func TestNHCCSVHasOneCentralWebhookDefinition(t *testing.T) {
 		notSet := []string{"objectSelector", "matchPolicy", "timeoutSeconds", "reinvocationPolicy", "conversionCRDs"}
 		for _, absent := range notSet {
 			if _, set := d[absent]; set {
-				t.Errorf("%s is set; NHC does not set it", absent)
+				t.Errorf("%s is set; %s does not set it", absent, operand)
 			}
 		}
 	}

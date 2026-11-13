@@ -43,6 +43,8 @@ linters:
       - internal/webhooks/nhc/v1alpha1
       - internal/webhooks/nhc/cluster
       - internal/webhooks/nhc/annotations
+      # Copied from NMO with minimal adaptation; see internal/webhooks/nmo/SOURCE.md.
+      - internal/webhooks/nmo/v1beta1
       - third_party$
       - builtin$
       - examples$
