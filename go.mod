@@ -9,6 +9,7 @@ require (
 	github.com/medik8s/common v1.17.0
 	github.com/medik8s/fence-agents-remediation/v5 v5.0.0-20261103000740-58e8107d32e5
 	github.com/medik8s/node-healthcheck-operator/v5 v5.0.0-20261103000740-8b326d3acfe5
+	github.com/medik8s/node-maintenance-operator/v5 v5.0.0-20261013171824-5baa709167a2
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/openshift/api v0.0.0-20260805215214-cfb63858e9d7

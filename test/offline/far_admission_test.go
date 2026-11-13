@@ -105,6 +105,9 @@ func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 				if _, nhc := nhcAdmissionTable[name]; nhc {
 					continue // nhc_admission_test.go checks the NHC definition.
 				}
+				if _, nmo := nmoAdmissionTable[name]; nmo {
+					continue // nmo_admission_test.go checks the NMO definition.
+				}
 				row, known := farAdmissionTable[name]
 				if !known || seen[name] {
 					t.Fatalf("unexpected or repeated webhook definition %q", name)
@@ -236,7 +239,9 @@ func TestWAOServiceAccountSecretPermissionIsGetOnly(t *testing.T) {
 				})
 				if coreGroup && coversSecrets {
 					secretRules++
-					getOnly := slices.Equal(verbs, []string{"get"}) && slices.Equal(resources, []string{"secrets"})
+					// The generator can put other resources with the same verb into this rule, for example nodes.
+					getOnly := slices.Equal(verbs, []string{"get"}) && slices.Contains(resources, "secrets") &&
+						!slices.ContainsFunc(resources, func(r string) bool { return r == "*" || strings.HasPrefix(r, "secrets/") })
 					if scope != "clusterPermissions" || !getOnly {
 						t.Errorf("%s rule for Secrets: resources %v verbs %v, want cluster-wide get on secrets only",
 							scope, resources, verbs)

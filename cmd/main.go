@@ -27,6 +27,7 @@ import (
 
 	farapi "github.com/medik8s/fence-agents-remediation/v5/api/v1alpha1"
 	nhcapi "github.com/medik8s/node-healthcheck-operator/v5/api/v1alpha1"
+	nmoapi "github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,6 +57,7 @@ import (
 	farwebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/far"
 	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
 	nhcwebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/nhc"
+	nmowebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/nmo"
 	"github.com/medik8s/workload-availability-operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -75,6 +77,8 @@ func init() {
 	// reads the Infrastructure object of OpenShift for the control plane topology.
 	utilruntime.Must(nhcapi.AddToScheme(scheme))
 	utilruntime.Must(configv1.Install(scheme))
+	// The WAO manager serves NMO admission, so it decodes the NMO types.
+	utilruntime.Must(nmoapi.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -283,6 +287,12 @@ func main() {
 	// Each failure stops the manager.
 	if err = nhcwebhooks.Initialize(mgr); err != nil {
 		setupLog.Error(err, "unable to initialize NHC admission")
+		os.Exit(1)
+	}
+	// Each replica serves NMO admission, also when it does not lead and when NMO is Disabled.
+	// Each failure stops the manager.
+	if err = nmowebhooks.Initialize(mgr); err != nil {
+		setupLog.Error(err, "unable to initialize NMO admission")
 		os.Exit(1)
 	}
 	// One listener in each replica serves the admission of all components. The Pod is ready only when it serves.

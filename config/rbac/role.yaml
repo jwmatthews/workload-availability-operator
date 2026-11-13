@@ -27,9 +27,16 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - nodes
   - secrets
   verbs:
   - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
@@ -107,6 +114,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - list
 - apiGroups:
   - remediation.medik8s.io
   resources:

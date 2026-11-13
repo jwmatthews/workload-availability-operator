@@ -1,0 +1,182 @@
+/*
+Copyright 2021.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1beta1
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/medik8s/common/pkg/etcd"
+	"github.com/medik8s/common/pkg/nodes"
+	nodemaintenancev1beta1 "github.com/medik8s/node-maintenance-operator/v5/api/v1beta1"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+const (
+	errorNodeNotExists               = "invalid nodeName, no node with name %s found"
+	errorNodeMaintenanceExists       = "invalid nodeName, a NodeMaintenance for node %s already exists"
+	errorControlPlaneQuorumViolation = "can not put master/control-plane node into maintenance at this moment, disrupting node %s will violate etcd quorum"
+	errorNodeNameUpdateForbidden     = "updating spec.NodeName isn't allowed"
+)
+
+const (
+	etcdQuorumPDBNewName   = "etcd-guard-pdb"    // The new name of the PDB - From OCP 4.11
+	etcdQuorumPDBOldName   = "etcd-quorum-guard" // The old name of the PDB - Up to OCP 4.10
+	etcdQuorumPDBNamespace = "openshift-etcd"
+)
+
+// log is for logging in this package.
+var nodemaintenancelog = logf.Log.WithName("nodemaintenance-resource")
+
+// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+
+// WAO adaptation: the validator uses admissionClient instead of mgr.GetClient().
+func SetupNodeMaintenanceWebhookWithManager(isOpenShift bool, mgr ctrl.Manager, admissionClient client.Client) error {
+	return ctrl.NewWebhookManagedBy(mgr, &nodemaintenancev1beta1.NodeMaintenance{}).
+		WithValidator(&nodeMaintenanceValidator{
+			client:      admissionClient,
+			isOpenShift: isOpenShift,
+		}).
+		Complete()
+}
+
+// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+//+kubebuilder:webhook:path=/validate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance,mutating=false,failurePolicy=fail,sideEffects=None,groups=nodemaintenance.medik8s.io,resources=nodemaintenances,verbs=create;update,versions=v1beta1,name=vnodemaintenance.kb.io,admissionReviewVersions=v1
+
+type nodeMaintenanceValidator struct {
+	client      client.Client
+	isOpenShift bool
+}
+
+var _ admission.Validator[*nodemaintenancev1beta1.NodeMaintenance] = &nodeMaintenanceValidator{}
+
+// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+func (v *nodeMaintenanceValidator) ValidateCreate(_ context.Context, nm *nodemaintenancev1beta1.NodeMaintenance) (admission.Warnings, error) {
+	nodemaintenancelog.Info("validate create", "name", nm.Name)
+
+	// Validate that node with given name exists
+	nodeName := nm.Spec.NodeName
+	if err := v.validateNodeExists(nodeName); err != nil {
+		nodemaintenancelog.Info("validation failed ", "nmName", nm.Name, "nodeName", nodeName, "error", err)
+		return nil, err
+	}
+
+	// Validate that no NodeMaintenance for given node exists yet
+	if err := v.validateNoNodeMaintenanceExists(nodeName); err != nil {
+		nodemaintenancelog.Info("validation failed", "nmName", nm.Name, "nodeName", nodeName, "error", err)
+		return nil, err
+	}
+
+	// Validate that NodeMaintenance for control-plane nodes don't violate quorum
+	if err := v.validateControlPlaneQuorum(nodeName); err != nil {
+		nodemaintenancelog.Info("validation failed", "nmName", nm.Name, "nodeName", nodeName, "error", err)
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+func (v *nodeMaintenanceValidator) ValidateUpdate(_ context.Context, nmOld, nmNew *nodemaintenancev1beta1.NodeMaintenance) (admission.Warnings, error) {
+	// Validate that node name didn't change
+	if nmNew.Spec.NodeName != nmOld.Spec.NodeName {
+		nodemaintenancelog.Info("validation failed", "error", errorNodeNameUpdateForbidden)
+		return nil, fmt.Errorf(errorNodeNameUpdateForbidden)
+	}
+	return nil, nil
+}
+
+// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
+func (v *nodeMaintenanceValidator) ValidateDelete(_ context.Context, nm *nodemaintenancev1beta1.NodeMaintenance) (admission.Warnings, error) {
+	nodemaintenancelog.Info("validate delete", "name", nm.Name)
+	return nil, nil
+}
+
+func (v *nodeMaintenanceValidator) validateNodeExists(nodeName string) error {
+	if node, err := getNode(nodeName, v.client); err != nil {
+		return fmt.Errorf("could not get node for validating spec.NodeName, please try again: %v", err)
+	} else if node == nil {
+		return fmt.Errorf(errorNodeNotExists, nodeName)
+	}
+	return nil
+}
+
+func (v *nodeMaintenanceValidator) validateNoNodeMaintenanceExists(nodeName string) error {
+	var nodeMaintenances nodemaintenancev1beta1.NodeMaintenanceList
+	if err := v.client.List(context.TODO(), &nodeMaintenances, &client.ListOptions{}); err != nil {
+		return fmt.Errorf("could not list NodeMaintenances for validating spec.NodeName, please try again: %v", err)
+	}
+
+	for _, nm := range nodeMaintenances.Items {
+		if nm.Spec.NodeName == nodeName {
+			return fmt.Errorf(errorNodeMaintenanceExists, nodeName)
+		}
+	}
+
+	return nil
+}
+
+func (v *nodeMaintenanceValidator) validateControlPlaneQuorum(nodeName string) error {
+	if !v.isOpenShift {
+		// etcd quorum PDB is only installed in OpenShift
+		nodemaintenancelog.Info("Cluster does not have etcd quorum PDB, thus we can't asses control-plane quorum violation")
+		return nil
+	}
+	// check if the node is a control-plane node on OpenShift
+	node, err := getNode(nodeName, v.client)
+	if err != nil {
+		return fmt.Errorf("could not get node for master/control-plane quorum validation, please try again: %v", err)
+	} else if node == nil {
+		// this should have been catched already, but just in case
+		return fmt.Errorf(errorNodeNotExists, nodeName)
+	} else if !nodes.IsControlPlane(node) {
+		// not a control-plane node, nothing to do
+		return nil
+	}
+	// The node is a control-plane node on OpenShift
+	// now we check if adding nm CR for this node will disrupt control-plane quorum
+	isDisruptionAllowed, err := etcd.IsEtcdDisruptionAllowed(context.Background(), v.client, nodemaintenancelog, node)
+	if err != nil {
+		return err
+	}
+	if !isDisruptionAllowed {
+		return fmt.Errorf(errorControlPlaneQuorumViolation, nodeName)
+	}
+	return nil
+}
+
+// getNode returns a node if it exists, otherwise it returns nil
+func getNode(nodeName string, client client.Client) (*corev1.Node, error) {
+	var node corev1.Node
+	key := types.NamespacedName{
+		Name: nodeName,
+	}
+	if err := client.Get(context.TODO(), key, &node); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("could not get node: %v", err)
+	}
+	return &node, nil
+}
