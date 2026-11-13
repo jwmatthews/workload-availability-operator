@@ -34,7 +34,11 @@ import (
 	"github.com/medik8s/workload-availability-operator/internal/webhooks/nhc/cluster"
 )
 
-const nhcPath = "/validate-remediation-medik8s-io-v1alpha1-nodehealthcheck"
+const (
+	nhcPath = "/validate-remediation-medik8s-io-v1alpha1-nodehealthcheck"
+	// changedSelectorKey is the selector key that the tests use for a selector change.
+	changedSelectorKey = "wao.test/changed"
+)
 
 func nhcScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
@@ -313,7 +317,7 @@ func TestHandlerAnswersUpdateAndDelete(t *testing.T) {
 	wantDenied(t, review(t, mgr, admissionv1.Delete, nil, remediating), "deletion prohibited due to running remediation")
 
 	changed := remediating.DeepCopy()
-	changed.Spec.Selector.MatchExpressions[0].Key = "wao.test/changed"
+	changed.Spec.Selector.MatchExpressions[0].Key = changedSelectorKey
 	wantDenied(t, review(t, mgr, admissionv1.Update, changed, remediating), "selector update prohibited due to running remediation")
 	// A change of a field that is not restricted passes during a remediation.
 	paused := remediating.DeepCopy()
