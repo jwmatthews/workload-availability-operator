@@ -244,7 +244,7 @@ Not selected: use of the NHC `Capabilities` value. It gives the same answer now,
 
 **N3. No `AdmissionBlock` for NMO.** No rule rejects a delete, and the one `UPDATE` rule does not depend on the controller. Section 2, row 5.
 
-**N4. Keep the NMO webhook Service and certificate patch.** The unchanged NMO image stops without certificate files. A new issue records the unused listener.
+**N4. Keep the NMO webhook Service and certificate patch.** The unchanged NMO image stops without certificate files. [Issue 20](https://github.com/jwmatthews/workload-availability-operator/issues/20) records the unused listener.
 
 **N5 (2026-11-13). Components to enable during cluster acceptance.**
 
@@ -264,24 +264,24 @@ A new security choice during the implementation gets a row here, a decision iden
 | Permissions of the WAO ServiceAccount | Cluster scope, minimum verbs, no write verb (N1) | WAO can list the Pods of each namespace | [19](https://github.com/jwmatthews/workload-availability-operator/issues/19) |
 | `failurePolicy` | `Fail`, unchanged from NMO | A `NodeMaintenance` `CREATE` or `UPDATE` fails when no WAO replica answers. Two replicas decrease the probability. | `AGENTS.md` |
 | Answer when a read fails | Reject, unchanged from NMO | A failed read of a Node, the list or the etcd objects rejects the request. The handler does not pass a request that it cannot check. | None |
-| Source of the handler data | Direct read from the API server, not a cache | Each `CREATE` adds 2 to 5 read requests to the API server. A user with `create` on `nodemaintenances` can cause these requests, also with dry-run. | To open |
-| Information in the admission answer | Unchanged from NMO | A user with `create` on `nodemaintenances` learns if a node name exists and if a drain can break the etcd quorum, without `get` on nodes. Standalone NMO gives the same answer. With WAO, the answer is available also while NMO is `Disabled`. | To open |
+| Source of the handler data | Direct read from the API server, not a cache | Each `CREATE` adds 2 to 5 read requests to the API server. A user with `create` on `nodemaintenances` can cause these requests, also with dry-run. | [21](https://github.com/jwmatthews/workload-availability-operator/issues/21) |
+| Information in the admission answer | Unchanged from NMO | A user with `create` on `nodemaintenances` learns if a node name exists and if a drain can break the etcd quorum, without `get` on nodes. Standalone NMO gives the same answer. With WAO, the answer is available also while NMO is `Disabled`. | [21](https://github.com/jwmatthews/workload-availability-operator/issues/21) |
 | Log content | Unchanged from NMO | Object names and node names go to the WAO manager log. No Secret value. | None |
 | TLS settings of the listener | No change in this plan | The WAO listener does not apply the API server TLS profile. Standalone NMO does. | [18](https://github.com/jwmatthews/workload-availability-operator/issues/18) |
-| NMO operand listener | Stays, with its Service and certificate (N4) | One network listener and one certificate Secret have no use. | To open |
+| NMO operand listener | Stays, with its Service and certificate (N4) | One network listener and one certificate Secret have no use. | [20](https://github.com/jwmatthews/workload-availability-operator/issues/20) |
 | OpenShift check at start | Stop the manager on a discovery error (N2) | A discovery error stops WAO admission for all operands. The alternative, an assumed answer, can disable the quorum rule. | [13](https://github.com/jwmatthews/workload-availability-operator/issues/13) |
 | Registration owner | OLM, from the WAO CSV | A person with write access to the admission configuration can remove the entry. This is the same for each installer. | None |
 
-### Issues to open with the implementation
+### Issues of this work
 
 | Subject | Source |
 | --- | --- |
 | [18](https://github.com/jwmatthews/workload-availability-operator/issues/18): TLS profile of the WAO admission listener | R4. Open. |
 | [19](https://github.com/jwmatthews/workload-availability-operator/issues/19): cluster-wide read permissions for NMO admission, decision N1 | R1. Open. |
-| NMO admission answers show node and etcd state to a user with `create` on `nodemaintenances`, and each request causes direct reads | Security record |
-| Unused webhook listener of the NMO operand | R3, N4 |
-| NMO admission rules 2, 3 (rejection) and 4 have no live cluster evidence | R5 |
-| A `NodeMaintenance` that is accepted while NMO is `Disabled` starts a drain when NMO is `Enabled` | R2 |
+| [21](https://github.com/jwmatthews/workload-availability-operator/issues/21): NMO admission answers show node and etcd state to a user with `create` on `nodemaintenances`, and each request causes direct reads | Security record. Open. |
+| [20](https://github.com/jwmatthews/workload-availability-operator/issues/20): unused webhook listener of the NMO operand | R3, N4. Open. |
+| [23](https://github.com/jwmatthews/workload-availability-operator/issues/23): NMO admission rules 2, 3 (rejection) and 4 have no live cluster evidence | R5. Open. |
+| [22](https://github.com/jwmatthews/workload-availability-operator/issues/22): a `NodeMaintenance` that is accepted while NMO is `Disabled` starts a drain when NMO is `Enabled` | R2. Open. |
 
 ## 5. Implementation sequence
 
@@ -300,3 +300,42 @@ The marker of the copied file changes the bundle. Thus the copy and the registra
 | 8 | docs: add classic OLM acceptance results (section 3.9). Server-side dry-run only. | Results table in `docs/nmo-webhooks.md` |
 
 Not in this plan: OLM v1 acceptance, SNR and SBR admission, a change of the listener TLS settings, a rebase.
+
+## 6. Implementation record (2026-11-13)
+
+The sequence of section 5 is complete. The branch is local.
+
+| Plan commit | Result |
+| --- | --- |
+| 1 | `docs: add the plan for the NMO admission webhook in WAO` |
+| 2 | `Initialize NMO admission in each WAO replica` |
+| 3 | `Test the NMO validation behavior that WAO preserves` |
+| 4 | `Move NMO admission registration to the WAO installation` |
+| 5 | `Test the registered NMO handler through an API server` |
+| 6 | `Test the NMO admission wiring of the manager binary` |
+| 7 and 8 | `docs: add NMO admission operation notes and classic OLM acceptance results` |
+
+Differences from the plan text:
+
+- Section 3.2: the copied suite `webhook_suite_test.go` uses the webhook path of the copied NMO configuration (`config/operands/nmo/config/webhook`), as the NHC copy does. The plan named `config/webhook`.
+- Section 3.7: the envtest suite has no step for a second replica. The NHC suite has none, and the FAR suite tests the shared listener. The cluster acceptance sent requests to the replica that is not the leader.
+- Section 3.7: `test/offline` has a shared function `checkCSVDefinition` for NHC and NMO. The lint check rejected the duplicate code.
+- controller-gen puts `nodes` and `secrets` into one rule, because the two have the verb `get`. The test `TestWAOServiceAccountSecretPermissionIsGetOnly` now accepts a rule with other resources if the only verb is `get`.
+- `go mod tidy` changed only the NMO module line in `go.mod`. No other requirement changed.
+- Section 3.9, step 1: the cluster had no WAO installation at the start, so no removal was necessary.
+
+Answers to the unknowns:
+
+- The Go module proxy resolved the NMO revision as `v5.0.0-20261013171824-5baa709167a2`.
+- After an uninstall with all components `Disabled`, the namespace had no SNR DaemonSet.
+
+Issues for the concerns:
+
+| Issue | Subject |
+| --- | --- |
+| [18](https://github.com/jwmatthews/workload-availability-operator/issues/18) | The WAO admission listener does not apply the API server TLS profile (R4) |
+| [19](https://github.com/jwmatthews/workload-availability-operator/issues/19) | Cluster-wide read permissions for NMO admission (N1) |
+| [20](https://github.com/jwmatthews/workload-availability-operator/issues/20) | Unused webhook listener of the NMO operand (R3, N4) |
+| [21](https://github.com/jwmatthews/workload-availability-operator/issues/21) | Admission answers show node and etcd state, and each request causes direct reads |
+| [22](https://github.com/jwmatthews/workload-availability-operator/issues/22) | A `NodeMaintenance` that is accepted while NMO is `Disabled` starts a drain when NMO is `Enabled` (R2) |
+| [23](https://github.com/jwmatthews/workload-availability-operator/issues/23) | No live cluster evidence for rules 2 and 4 and the quorum rejection (R5) |
