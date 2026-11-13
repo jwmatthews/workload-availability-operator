@@ -159,14 +159,15 @@ func TestNHCAdmissionBlockReadsTheRemediationStatus(t *testing.T) {
 	}
 }
 
-// The WAO manager serves FAR and NHC admission. OLM installs their registrations with WAO, so these
+// The WAO manager serves FAR, NHC and NMO admission. OLM installs their registrations with WAO, so these
 // operands render no admission configuration. The other operands keep their own webhooks.
-func TestFARAndNHCAdmissionIsCentral(t *testing.T) {
-	central := map[string]bool{v1alpha1.ComponentKeyFenceAgentsRemediation: true, v1alpha1.ComponentKeyNodeHealthCheck: true}
+func TestFARNHCAndNMOAdmissionIsCentral(t *testing.T) {
+	central := map[string]bool{v1alpha1.ComponentKeyFenceAgentsRemediation: true, v1alpha1.ComponentKeyNodeHealthCheck: true,
+		v1alpha1.ComponentKeyNodeMaintenance: true}
 	wantWebhooks := map[string]int{
 		v1alpha1.ComponentKeyNodeHealthCheck: 0, v1alpha1.ComponentKeySelfNodeRemediation: 2,
 		v1alpha1.ComponentKeyStorageBasedRemediation: 0, v1alpha1.ComponentKeyFenceAgentsRemediation: 0,
-		v1alpha1.ComponentKeyMachineDeletionRemediation: 0, v1alpha1.ComponentKeyNodeMaintenance: 1,
+		v1alpha1.ComponentKeyMachineDeletionRemediation: 0, v1alpha1.ComponentKeyNodeMaintenance: 0,
 	}
 	for _, d := range components.All() {
 		if len(d.Webhooks) != wantWebhooks[d.Key] {

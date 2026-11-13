@@ -12,7 +12,7 @@ func NMO() Definition {
 		ManagerContainer:  "manager",
 		Deployments:       []string{"node-maintenance-operator-controller-manager"},
 		Images:            []string{images.NMOManager},
-		Webhooks:          []WebhookConfiguration{{Kind: "ValidatingWebhookConfiguration", Name: "node-maintenance-operator-validating-webhook-configuration"}},
+		CentralAdmission:  true,
 		ManagedKinds:      []ResourceKind{{Group: "nodemaintenance.medik8s.io", Version: "v1beta1", Kind: "NodeMaintenance"}},
 	}
 }

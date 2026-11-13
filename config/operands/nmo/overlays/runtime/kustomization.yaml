@@ -1,5 +1,6 @@
-# Runtime objects WAO applies when the component is enabled: Deployment, Services, ConfigMaps and
-# webhook configurations. `make operand-manifests` builds this, drops every other kind, and writes
+# Runtime objects WAO applies when the component is enabled: Deployment, Services and ConfigMaps.
+# NMO has no webhook configuration here: the WAO manager serves NMO admission (docs/nmo-webhooks.md).
+# `make operand-manifests` builds this, drops every other kind, and writes
 # internal/operands/manifests/nmo/objects.yaml. The namespace and image placeholders
 # are replaced by the Go renderer at reconcile time.
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -33,6 +34,6 @@ patches:
     target:
       kind: Service
       name: node-maintenance-operator-webhook-service
-  - path: webhook_validating_patch.yaml
+  - path: webhook_configurations_delete_patch.yaml
     target:
       kind: ValidatingWebhookConfiguration
