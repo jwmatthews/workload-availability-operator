@@ -26,6 +26,7 @@ import (
 	"runtime"
 
 	farapi "github.com/medik8s/fence-agents-remediation/v5/api/v1alpha1"
+	nhcapi "github.com/medik8s/node-healthcheck-operator/v5/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,11 +48,14 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	configv1 "github.com/openshift/api/config/v1"
+
 	workloadavailabilityv1alpha1 "github.com/medik8s/workload-availability-operator/api/v1alpha1"
 	"github.com/medik8s/workload-availability-operator/internal/controller"
 	"github.com/medik8s/workload-availability-operator/internal/images"
 	farwebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/far"
 	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
+	nhcwebhooks "github.com/medik8s/workload-availability-operator/internal/webhooks/nhc"
 	"github.com/medik8s/workload-availability-operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -67,6 +71,10 @@ func init() {
 	utilruntime.Must(workloadavailabilityv1alpha1.AddToScheme(scheme))
 	// The WAO manager serves FAR admission, so it decodes the FAR types.
 	utilruntime.Must(farapi.AddToScheme(scheme))
+	// The WAO manager serves NHC admission, so it decodes the NHC types. NHC admission
+	// reads the Infrastructure object of OpenShift for the control plane topology.
+	utilruntime.Must(nhcapi.AddToScheme(scheme))
+	utilruntime.Must(configv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -269,6 +277,12 @@ func main() {
 	// Thus this registration is not behind leader election or operand state. Each failure stops the manager.
 	if err = farwebhooks.Initialize(mgr, farAgentInventory); err != nil {
 		setupLog.Error(err, "unable to initialize FAR admission")
+		os.Exit(1)
+	}
+	// Each replica serves NHC admission, also when it does not lead and when NHC is Disabled.
+	// Each failure stops the manager.
+	if err = nhcwebhooks.Initialize(mgr); err != nil {
+		setupLog.Error(err, "unable to initialize NHC admission")
 		os.Exit(1)
 	}
 	// One listener in each replica serves the admission of all components. The Pod is ready only when it serves.

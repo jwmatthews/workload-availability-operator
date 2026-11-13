@@ -64,6 +64,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - config.openshift.io
+  resources:
+  - infrastructures
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - fence-agents-remediation.medik8s.io
   resources:
   - fenceagentsremediations
@@ -72,6 +80,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - fence-agents-remediation.medik8s.io
+  resources:
+  - fenceagentsremediationtemplates
+  verbs:
+  - list
+- apiGroups:
   - machine-deletion-remediation.medik8s.io
   resources:
   - machinedeletionremediations
@@ -79,6 +93,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - machine-deletion-remediation.medik8s.io
+  resources:
+  - machinedeletionremediationtemplates
+  verbs:
+  - list
 - apiGroups:
   - nodemaintenance.medik8s.io
   resources:
@@ -105,6 +125,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - self-node-remediation.medik8s.io
+  resources:
+  - selfnoderemediationtemplates
+  verbs:
+  - list
+- apiGroups:
   - storage-based-remediation.medik8s.io
   resources:
   - storagebasedremediationconfigs
@@ -113,6 +139,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - storage-based-remediation.medik8s.io
+  resources:
+  - storagebasedremediationtemplates
+  verbs:
+  - list
 - apiGroups:
   - workloadavailability.medik8s.io
   resources:

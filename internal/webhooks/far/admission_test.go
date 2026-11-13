@@ -3,6 +3,7 @@ package far
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -103,14 +104,20 @@ func (s *admissionSuite) registrations(t *testing.T) {
 	if err := c.List(ctx, validating); err != nil {
 		t.Fatal(err)
 	}
+	// config/webhook/manifests.yaml also has the entries of other components. This suite checks the FAR entries.
+	add := func(name string, rules []admissionregistrationv1.RuleWithOperations, failure *admissionregistrationv1.FailurePolicyType) {
+		if len(rules) > 0 && slices.Contains(rules[0].APIGroups, farapi.GroupVersion.Group) {
+			entries[name] = entry{rules, failure}
+		}
+	}
 	for _, cfg := range mutating.Items {
 		for _, w := range cfg.Webhooks {
-			entries[w.Name] = entry{w.Rules, w.FailurePolicy}
+			add(w.Name, w.Rules, w.FailurePolicy)
 		}
 	}
 	for _, cfg := range validating.Items {
 		for _, w := range cfg.Webhooks {
-			entries[w.Name] = entry{w.Rules, w.FailurePolicy}
+			add(w.Name, w.Rules, w.FailurePolicy)
 		}
 	}
 	if len(entries) != 4 {
