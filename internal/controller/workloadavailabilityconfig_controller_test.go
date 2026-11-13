@@ -644,6 +644,78 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		}, 90*time.Second, time.Second).Should(Succeed())
 	})
 
+	It("reports the NodeHealthChecks that admission blocks while NHC is Disabled", func() {
+		nhcKey, mdr := v1alpha1.ComponentKeyNodeHealthCheck, v1alpha1.ComponentKeyMachineDeletionRemediation
+		gvk := schema.GroupVersionKind{Group: "remediation.medik8s.io", Version: "v1alpha1", Kind: "NodeHealthCheck"}
+		// This suite has no NHC registration and no NHC manager, so these objects start no remediation.
+		newPolicy := func(name string) *unstructured.Unstructured {
+			policy := &unstructured.Unstructured{}
+			policy.SetGroupVersionKind(gvk)
+			policy.SetName(name)
+			Expect(unstructured.SetNestedField(policy.Object, "51%", "spec", "minHealthy")).To(Succeed())
+			Expect(unstructured.SetNestedStringMap(policy.Object, map[string]string{"wao.test/none": "true"}, "spec", "selector", "matchLabels")).To(Succeed())
+			Expect(unstructured.SetNestedStringMap(policy.Object, map[string]string{"apiVersion": "wao.test/v1",
+				"kind": "SyntheticRemediationTemplate", "namespace": ns, "name": "template"}, "spec", "remediationTemplate")).To(Succeed())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			return policy
+		}
+		setRemediations := func(policy *unstructured.Unstructured, remediations []any) {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), policy)).To(Succeed())
+			nodes := []any{map[string]any{"name": "wao-test-node", "remediations": remediations}}
+			Expect(unstructured.SetNestedSlice(policy.Object, nodes, "status", "unhealthyNodes")).To(Succeed())
+			Expect(k8sClient.Status().Update(ctx, policy)).To(Succeed())
+		}
+		blocked, idle := newPolicy("wao-blocked-policy"), newPolicy("wao-idle-policy")
+		setRemediations(blocked, []any{map[string]any{"started": "2026-11-13T00:00:00Z", "resource": map[string]any{
+			"apiVersion": "wao.test/v1", "kind": "SyntheticRemediation", "namespace": ns, "name": "wao-test-node"}}})
+		setRemediations(idle, []any{})
+
+		setEnabled(ctx, mdr, true) // any spec change starts a reconcile of each component
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, nhcKey)
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisableIncomplete))
+			g.Expect(c.RetainedResources).To(ConsistOf(
+				"remediation.medik8s.io/v1alpha1 NodeHealthCheck wao-blocked-policy",
+				"remediation.medik8s.io/v1alpha1 NodeHealthCheck wao-idle-policy"))
+			g.Expect(c.Message).To(ContainSubstring("[NodeHealthCheck wao-blocked-policy]: the status shows a remediation"))
+			g.Expect(c.Message).To(ContainSubstring("admission rejects the delete"))
+			g.Expect(c.Message).To(ContainSubstring("set the component to Enabled again"))
+			g.Expect(c.Message).To(ContainSubstring("patch to the status subresource"))
+		}).Should(Succeed())
+
+		// The status patch is the documented procedure. Then the report has no blocked object.
+		setRemediations(blocked, []any{})
+		setEnabled(ctx, mdr, false)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, nhcKey)
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisableIncomplete))
+			g.Expect(c.RetainedResources).To(HaveLen(2))
+			g.Expect(c.Message).NotTo(ContainSubstring("admission rejects"))
+		}).Should(Succeed())
+
+		// With no policy, the component is Disabled with no message.
+		Expect(k8sClient.Delete(ctx, blocked)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, idle)).To(Succeed())
+		setEnabled(ctx, mdr, true)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			c := component(w, nhcKey)
+			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisabled))
+			g.Expect(c.Message).To(BeEmpty())
+		}).Should(Succeed())
+		setEnabled(ctx, mdr, false)
+		Eventually(func(g Gomega) {
+			w := getWAC(ctx)
+			g.Expect(w.Status.ObservedGeneration).To(Equal(w.Generation))
+			g.Expect(component(w, mdr).Phase).To(Equal(v1alpha1.ComponentPhaseDisabled))
+		}).Should(Succeed())
+	})
+
 	It("reports central FAR admission in each state and keeps central and foreign registrations", func() {
 		far, mdr := v1alpha1.ComponentKeyFenceAgentsRemediation, v1alpha1.ComponentKeyMachineDeletionRemediation
 		seedFARRegistrations(ctx)

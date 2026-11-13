@@ -279,7 +279,7 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 			return st, fmt.Errorf("delete %s/%s: %w", o.GetKind(), o.GetName(), err)
 		}
 	}
-	retained, err := r.retainedResources(ctx, def)
+	retained, blocked, err := r.retainedResources(ctx, def)
 	if err != nil {
 		return st, err
 	}
@@ -288,6 +288,10 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 	if len(retained) > 0 {
 		st.Phase = v1alpha1.ComponentPhaseDisableIncomplete
 		msgs = append(msgs, "manager removed; agents, configs or native objects it would reconcile remain and need the component's own procedure")
+	}
+	if len(blocked) > 0 {
+		// No controller changes the status of these objects while the component is Disabled.
+		msgs = append(msgs, fmt.Sprintf("%v: %s", blocked, def.AdmissionBlock.Message))
 	}
 	if len(skipped) > 0 {
 		msgs = append(msgs, fmt.Sprintf("left foreign objects untouched: %v", skipped))
@@ -308,9 +312,10 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 
 // retainedResources lists what outlives a manager-level disable: agent DaemonSets owned by
 // component configs and those configs (install namespace), plus native objects of the
-// component's managed kinds anywhere in the cluster.
-func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Context, def components.Definition) ([]string, error) {
-	var out []string
+// component's managed kinds anywhere in the cluster. The second result lists the objects of the
+// managed kinds that central admission protects because of their status (def.AdmissionBlock).
+func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Context, def components.Definition) ([]string, []string, error) {
+	var out, blocked []string
 	if len(def.AgentOwners) > 0 {
 		kinds := map[string]bool{}
 		for _, a := range def.AgentOwners {
@@ -318,7 +323,7 @@ func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Con
 		}
 		dsl := &appsv1.DaemonSetList{}
 		if err := r.List(ctx, dsl, client.InNamespace(r.Namespace)); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, ds := range dsl.Items {
 			for _, ref := range ds.OwnerReferences {
@@ -329,7 +334,7 @@ func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Con
 			}
 		}
 	}
-	list := func(k components.ResourceKind, opts ...client.ListOption) error {
+	list := func(k components.ResourceKind, managed bool, opts ...client.ListOption) error {
 		l := &unstructured.UnstructuredList{}
 		l.SetGroupVersionKind(schema.GroupVersionKind{Group: k.Group, Version: k.Version, Kind: k.Kind + "List"})
 		if err := r.List(ctx, l, opts...); err != nil {
@@ -344,21 +349,25 @@ func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Con
 				name = item.GetNamespace() + "/" + name
 			}
 			out = append(out, fmt.Sprintf("%s/%s %s %s", k.Group, k.Version, k.Kind, name))
+			if managed && def.AdmissionBlock != nil && def.AdmissionBlock.Blocked(item.Object) {
+				blocked = append(blocked, k.Kind+" "+name)
+			}
 		}
 		return nil
 	}
 	for _, a := range def.AgentOwners {
-		if err := list(a, client.InNamespace(r.Namespace)); err != nil {
-			return nil, err
+		if err := list(a, false, client.InNamespace(r.Namespace)); err != nil {
+			return nil, nil, err
 		}
 	}
 	for _, m := range def.ManagedKinds {
-		if err := list(m); err != nil {
-			return nil, err
+		if err := list(m, true); err != nil {
+			return nil, nil, err
 		}
 	}
 	sort.Strings(out)
-	return out, nil
+	sort.Strings(blocked)
+	return out, blocked, nil
 }
 
 func (r *WorkloadAvailabilityConfigReconciler) finalize(ctx context.Context, wac *v1alpha1.WorkloadAvailabilityConfig) (ctrl.Result, error) {
