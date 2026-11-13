@@ -13,26 +13,26 @@ import (
 
 const waoDeploymentName = "workload-availability-operator-controller-manager"
 
-// farWebhookEntry is the part of an admission entry that must be equal in the
-// Kubebuilder markers of the copied FAR files and in the CSV.
-type farWebhookEntry struct {
+// webhookEntry is the part of an admission entry that must be equal in the
+// Kubebuilder markers of the copied operand files and in the CSV.
+type webhookEntry struct {
 	Name, Type, Path, FailurePolicy, SideEffects string
 	Rules                                        string
 	AdmissionReviewVersions                      []string
 }
 
 // markerEntries reads config/webhook/manifests.yaml, which controller-gen writes from the
-// markers of the copied FAR webhook files.
-func markerEntries(t *testing.T) map[string]farWebhookEntry {
+// markers of the copied operand webhook files (FAR and NHC).
+func markerEntries(t *testing.T) map[string]webhookEntry {
 	t.Helper()
-	entries := map[string]farWebhookEntry{}
+	entries := map[string]webhookEntry{}
 	add := func(kind, name string, cc admissionregistrationv1.WebhookClientConfig,
 		rules []admissionregistrationv1.RuleWithOperations, failure *admissionregistrationv1.FailurePolicyType,
 		side *admissionregistrationv1.SideEffectClass, versions []string) {
 		if cc.Service == nil || cc.Service.Path == nil || failure == nil || side == nil {
 			t.Fatalf("%s: incomplete marker entry", name)
 		}
-		entries[name] = farWebhookEntry{Name: name, Type: kind, Path: *cc.Service.Path, FailurePolicy: string(*failure),
+		entries[name] = webhookEntry{Name: name, Type: kind, Path: *cc.Service.Path, FailurePolicy: string(*failure),
 			SideEffects: string(*side), Rules: fmt.Sprintf("%+v", rules), AdmissionReviewVersions: versions}
 	}
 	for _, doc := range strings.Split(readRepoFile(t, "config/webhook/manifests.yaml"), "\n---\n") {
@@ -74,8 +74,10 @@ var farAdmissionTable = map[string][3]string{
 
 func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 	markers := markerEntries(t)
-	if len(markers) != 4 {
-		t.Fatalf("the copied FAR files have %d webhook markers, want 4", len(markers))
+	for name := range farAdmissionTable {
+		if _, found := markers[name]; !found {
+			t.Fatalf("the copied FAR files have no webhook marker %s", name)
+		}
 	}
 	wantRules := func(resource string) string {
 		return fmt.Sprintf("%+v", []admissionregistrationv1.RuleWithOperations{{
@@ -96,13 +98,13 @@ func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(definitions) != 4 {
-				t.Fatalf("%d webhook definitions, want 4", len(definitions))
-			}
 			seen := map[string]bool{}
 			for _, raw := range definitions {
 				d := raw.(map[string]any)
 				name, _ := d["generateName"].(string)
+				if _, nhc := nhcAdmissionTable[name]; nhc {
+					continue // nhc_admission_test.go checks the NHC definition.
+				}
 				row, known := farAdmissionTable[name]
 				if !known || seen[name] {
 					t.Fatalf("unexpected or repeated webhook definition %q", name)
@@ -117,10 +119,10 @@ func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 					t.Fatal(err)
 				}
 				versions, _, _ := unstructured.NestedStringSlice(d, "admissionReviewVersions")
-				got := farWebhookEntry{Name: name, Type: fmt.Sprint(d["type"]), Path: fmt.Sprint(d["webhookPath"]),
+				got := webhookEntry{Name: name, Type: fmt.Sprint(d["type"]), Path: fmt.Sprint(d["webhookPath"]),
 					FailurePolicy: fmt.Sprint(d["failurePolicy"]), SideEffects: fmt.Sprint(d["sideEffects"]),
 					Rules: fmt.Sprintf("%+v", rules), AdmissionReviewVersions: versions}
-				want := farWebhookEntry{Name: name, Type: row[0], Path: row[2], FailurePolicy: "Fail", SideEffects: "None",
+				want := webhookEntry{Name: name, Type: row[0], Path: row[2], FailurePolicy: "Fail", SideEffects: "None",
 					Rules: wantRules(row[1]), AdmissionReviewVersions: []string{"v1"}}
 				if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
 					t.Errorf("%s:\n got %+v\nwant %+v", name, got, want)
@@ -140,6 +142,9 @@ func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 						t.Errorf("%s: %s is set; FAR does not set it", name, absent)
 					}
 				}
+			}
+			if len(seen) != 4 {
+				t.Fatalf("%d FAR webhook definitions, want 4", len(seen))
 			}
 		})
 	}
