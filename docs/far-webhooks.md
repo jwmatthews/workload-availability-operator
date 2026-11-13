@@ -44,7 +44,7 @@ The registration is part of the WAO installation. It is not an operand object.
   3. Make the dedicated client.
   4. Register the four handlers.
 - A failure of a step stops the manager, also when FAR is `Disabled`. The manager does not continue with an assumed value.
-- The readiness check `far-admission` uses the local webhook listener of the Pod. It does not use the FAR Deployment or the WAO Service endpoints. A Pod without a serving certificate or without a serving listener is not ready.
+- The readiness check `admission` uses the local webhook listener of the Pod. It does not use the FAR Deployment or the WAO Service endpoints. A Pod without a serving certificate or without a serving listener is not ready.
 - The `admissionReady` status of `fenceAgentsRemediation` shows the local listener of the leader replica, in the `Enabled` state and in the `Disabled` state.
 - FAR enable, FAR disable, and deletion of the `WorkloadAvailabilityConfig` do not remove the registration.
 - An uninstall of WAO removes the registration, because OLM owns it through the CSV.

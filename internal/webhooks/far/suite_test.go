@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
 )
 
 const (
@@ -122,7 +124,7 @@ func (e *admissionEnv) startReplica(t *testing.T, port int) *replica {
 	r := &replica{mgr: mgr, addr: fmt.Sprintf("%s:%d", e.options.LocalServingHost, port), done: make(chan error, 1), stop: cancel}
 	go func() { r.done <- mgr.Start(ctx) }()
 	t.Cleanup(func() { r.shutdown(t) })
-	eventually(t, "the webhook listener of the replica serves", Ready(mgr))
+	eventually(t, "the webhook listener of the replica serves", listener.Ready(mgr))
 	return r
 }
 

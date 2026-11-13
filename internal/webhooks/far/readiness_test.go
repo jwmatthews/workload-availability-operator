@@ -21,6 +21,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/medik8s/workload-availability-operator/internal/webhooks/listener"
 )
 
 func freePort(t *testing.T) int {
@@ -95,6 +97,9 @@ func startServingManager(t *testing.T, cfg *rest.Config, withCerts bool) *servin
 	if err := Initialize(mgr, writeInventory(t, testAgent+"\n")); err != nil {
 		t.Fatal(err)
 	}
+	if err := listener.AddReadyCheck(mgr); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &servingManager{mgr: mgr, probe: probe, startErr: make(chan error, 1), stop: cancel}
 	go func() { s.startErr <- mgr.Start(ctx) }()
@@ -126,14 +131,14 @@ func eventually(t *testing.T, what string, condition func() bool) {
 func TestReadinessFollowsTheLocalWebhookListener(t *testing.T) {
 	s := startServingManager(t, versionServer(t, "29", http.StatusOK), true)
 
-	eventually(t, "the far-admission readiness check passes", func() bool {
-		code, err := probeStatus(s.probe, "/readyz/"+ReadyCheckName)
+	eventually(t, "the admission readiness check passes", func() bool {
+		code, err := probeStatus(s.probe, "/readyz/"+listener.ReadyCheckName)
 		return err == nil && code == http.StatusOK
 	})
 	if code, err := probeStatus(s.probe, "/readyz"); err != nil || code != http.StatusOK {
 		t.Errorf("/readyz = %d, %v, want 200", code, err)
 	}
-	if !Ready(s.mgr)() {
+	if !listener.Ready(s.mgr)() {
 		t.Error("Ready reports false while the listener serves")
 	}
 
@@ -142,7 +147,7 @@ func TestReadinessFollowsTheLocalWebhookListener(t *testing.T) {
 	if err := <-s.startErr; err != nil {
 		t.Fatalf("manager stop: %v", err)
 	}
-	if Ready(s.mgr)() {
+	if listener.Ready(s.mgr)() {
 		t.Error("Ready reports true after the listener stopped")
 	}
 }
@@ -153,7 +158,7 @@ func TestNotReadyBeforeTheListenerStarts(t *testing.T) {
 	if err := Initialize(mgr, writeInventory(t, testAgent+"\n")); err != nil {
 		t.Fatal(err)
 	}
-	if Ready(mgr)() {
+	if listener.Ready(mgr)() {
 		t.Error("Ready reports true before the manager starts")
 	}
 }
@@ -168,7 +173,7 @@ func TestMissingCertificatesPreventReadiness(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		// The server waits for certificates. It must not report ready meanwhile.
 	}
-	if Ready(s.mgr)() {
+	if listener.Ready(s.mgr)() {
 		t.Error("Ready reports true without serving certificates")
 	}
 	if code, err := probeStatus(s.probe, "/readyz"); err == nil && code == http.StatusOK {

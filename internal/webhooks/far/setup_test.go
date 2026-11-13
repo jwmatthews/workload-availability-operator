@@ -260,18 +260,6 @@ func TestSetupWithManagerSetsUnsupportedStrategyState(t *testing.T) {
 	}
 }
 
-func TestNewAdmissionClientRejectsMissingInputs(t *testing.T) {
-	if _, err := NewAdmissionClient(nil, farScheme(t)); err == nil {
-		t.Error("NewAdmissionClient accepted a nil config")
-	}
-	if _, err := NewAdmissionClient(&rest.Config{Host: "127.0.0.1:1"}, nil); err == nil {
-		t.Error("NewAdmissionClient accepted a nil scheme")
-	}
-	if _, err := NewAdmissionClient(&rest.Config{Host: "127.0.0.1:1"}, farScheme(t)); err != nil {
-		t.Errorf("NewAdmissionClient failed for a valid config: %v", err)
-	}
-}
-
 func writeInventory(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agents.txt")
