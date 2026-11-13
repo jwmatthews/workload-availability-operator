@@ -37,8 +37,9 @@ import (
 // and the readiness check. A removed Initialize call makes them fail.
 
 const (
-	testNamespace = "wao-main-test"
-	validatePath  = "/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation"
+	testNamespace   = "wao-main-test"
+	validatePath    = "/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation"
+	nhcValidatePath = "/validate-remediation-medik8s-io-v1alpha1-nodehealthcheck"
 )
 
 type mainEnv struct {
@@ -209,6 +210,14 @@ func TestManagerStopsWithoutAgentInventory(t *testing.T) {
 	}
 }
 
+// maxUnhealthyField returns the JSON text of the maxUnhealthy field, or no text for an empty value.
+func maxUnhealthyField(value string) string {
+	if value == "" {
+		return ""
+	}
+	return `,"maxUnhealthy":"` + value + `"`
+}
+
 func TestManagerServesFARAdmission(t *testing.T) {
 	env := startMainEnv(t)
 	certDir := t.TempDir()
@@ -277,6 +286,53 @@ func TestManagerServesFARAdmission(t *testing.T) {
 		}
 		if !wantAllowed && !strings.Contains(out.Response.Status.Message, "unsupported fence agent: "+agent) {
 			t.Errorf("agent %s: message %q", agent, out.Response.Status.Message)
+		}
+	}
+
+	// The readiness check of the shared listener has the name "admission".
+	resp, err := httpClient.Get(fmt.Sprintf("http://127.0.0.1:%d/readyz/admission", probePort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/readyz/admission = %d, want 200", resp.StatusCode)
+	}
+
+	// The same listener serves the NHC validator. The test API server is not OpenShift, so the
+	// control plane topology is a supported one.
+	for maxUnhealthy, wantMessage := range map[string]string{
+		"":    "",
+		"49%": "minHealthy and maxUnhealthy cannot be specified at the same time",
+	} {
+		review := fmt.Sprintf(`{"apiVersion":"admission.k8s.io/v1","kind":"AdmissionReview","request":{"uid":"wao-main-test",
+"kind":{"group":"remediation.medik8s.io","version":"v1alpha1","kind":"NodeHealthCheck"},"operation":"CREATE",
+"object":{"apiVersion":"remediation.medik8s.io/v1alpha1","kind":"NodeHealthCheck","metadata":{"name":"wao-main-test"},
+"spec":{"minHealthy":"51%%"%s,"selector":{"matchLabels":{"wao.test/none":"true"}},
+"remediationTemplate":{"apiVersion":"wao.test/v1","kind":"SyntheticRemediationTemplate",
+"namespace":%q,"name":"template"}}}}}`,
+			maxUnhealthyField(maxUnhealthy), testNamespace)
+		resp, err := httpClient.Post(fmt.Sprintf("https://127.0.0.1:%d%s", webhookPort, nhcValidatePath),
+			"application/json", strings.NewReader(review))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		var out struct {
+			Response struct {
+				Allowed bool `json:"allowed"`
+				Status  struct {
+					Message string `json:"message"`
+				} `json:"status"`
+			} `json:"response"`
+		}
+		if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &out) != nil {
+			t.Fatalf("NodeHealthCheck: HTTP %d: %s", resp.StatusCode, body)
+		}
+		if out.Response.Allowed != (wantMessage == "") || !strings.Contains(out.Response.Status.Message, wantMessage) {
+			t.Errorf("NodeHealthCheck with maxUnhealthy %q: allowed = %v, message %q, want message %q",
+				maxUnhealthy, out.Response.Allowed, out.Response.Status.Message, wantMessage)
 		}
 	}
 }
