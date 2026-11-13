@@ -30,6 +30,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 
+	"github.com/medik8s/workload-availability-operator/internal/components"
 	"github.com/medik8s/workload-availability-operator/internal/webhooks/nhc/cluster"
 )
 
@@ -319,6 +320,39 @@ func TestHandlerAnswersUpdateAndDelete(t *testing.T) {
 	paused.Spec.PauseRequests = []string{"wao-test"}
 	if resp := review(t, mgr, admissionv1.Update, paused, remediating); !resp.Allowed {
 		t.Errorf("a pause request during a remediation was rejected: %+v", resp.Result)
+	}
+}
+
+// The reconciler reports the NodeHealthChecks that admission blocks while NHC is Disabled. Its
+// condition (components.NHC().AdmissionBlock) must select the same objects as the delete rule of the handler.
+func TestAdmissionBlockOfTheComponentAgreesWithTheHandler(t *testing.T) {
+	mgr := newTestManager(t, stubAPIServer(t, stubCluster{}), nhcScheme(t))
+	opts := Options{AdmissionClient: fake.NewClientBuilder().Build(), Capabilities: supported()}
+	if err := SetupWithManager(mgr, opts); err != nil {
+		t.Fatal(err)
+	}
+	remediation := &nhcapi.Remediation{Resource: *testTemplate("request")}
+	for name, nodes := range map[string][]*nhcapi.UnhealthyNode{
+		"no unhealthy node":           nil,
+		"unhealthy node, no entry":    {{Name: "worker-a"}},
+		"one remediation":             {{Name: "worker-a", Remediations: []*nhcapi.Remediation{remediation}}},
+		"second node has the entry":   {{Name: "worker-a"}, {Name: "worker-b", Remediations: []*nhcapi.Remediation{remediation}}},
+		"two remediations on a node":  {{Name: "worker-a", Remediations: []*nhcapi.Remediation{remediation, remediation}}},
+		"unhealthy node, empty slice": {{Name: "worker-a", Remediations: []*nhcapi.Remediation{}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			policy := testNHC("policy")
+			policy.Status.UnhealthyNodes = nodes
+			object, err := runtime.DefaultUnstructuredConverter.ToUnstructured(policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reported := components.NHC().AdmissionBlock.Blocked(object)
+			rejected := !review(t, mgr, admissionv1.Delete, nil, policy).Allowed
+			if reported != rejected {
+				t.Errorf("the component reports blocked = %v, the handler rejects the delete = %v", reported, rejected)
+			}
+		})
 	}
 }
 
