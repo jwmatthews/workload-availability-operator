@@ -200,6 +200,7 @@ The FAR admission tests are in three groups:
 - `internal/webhooks/far/inventory`: the inventory parser and the name lookup.
 - `internal/webhooks/far/v1alpha1`: the FAR tests for the copied files, and the WAO behavior tests.
 - `cmd`: tests that start the built manager binary with an envtest API server. They check the flags, the stop without an inventory, readiness, and one admission request.
+- `internal/webhooks/listener`: the dedicated client and the readiness of the listener, which all components share.
 - `internal/webhooks/far`: startup errors, readiness, and `TestAdmissionThroughAPIServer`.
   That test sends requests through an envtest API server to the four registered handlers.
   It also checks a second replica without the leader lease, and the `Fail` policy when no listener serves.

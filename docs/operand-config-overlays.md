@@ -91,8 +91,9 @@ Applies WAO's integration adjustments on top of the copied base:
   and Service selector.
 - Patches wiring OpenShift service-ca into the webhook Service, the manager's certificate
   volume, and the webhook configuration's CA injection.
-- FAR only: a patch that deletes the two webhook configurations. The WAO manager serves FAR
-  admission, and OLM installs that registration with WAO. See [far-webhooks.md](far-webhooks.md).
+- FAR and NHC only: a patch that deletes the webhook configurations of the operand. The WAO
+  manager serves FAR and NHC admission, and OLM installs those registrations with WAO.
+  See [far-webhooks.md](far-webhooks.md) and [nhc-webhooks.md](nhc-webhooks.md).
 
 **How it is invoked.** `make operand-manifests` runs
 `kustomize build config/operands/<key>/overlays/runtime`, filters the output to the kinds

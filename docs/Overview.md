@@ -66,8 +66,9 @@ request before it drains a node. The trial below uses NMO.
 - **Preserve resource ownership.** WAO reports a conflict if a required object
   already exists without WAO ownership. It does not adopt that object.
 - **Make disabling explicit.** WAO removes the resources it manages, including
-  webhooks. The FAR webhooks are an exception: the WAO manager serves them in each
-  state, as [FAR admission webhooks in WAO](far-webhooks.md) describes. It preserves webhook failure policies and never changes `Fail` to
+  webhooks. The FAR and NHC webhooks are an exception: the WAO manager serves them in each
+  state, as [FAR admission webhooks in WAO](far-webhooks.md) and
+  [NHC admission webhooks in WAO](nhc-webhooks.md) describe. It preserves webhook failure policies and never changes `Fail` to
   `Ignore`. Objects created by an upstream controller can remain.
 
 Disabling a component stops its manager, but existing agents or native API
