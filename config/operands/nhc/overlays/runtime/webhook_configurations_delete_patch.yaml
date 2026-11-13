@@ -1,0 +1,7 @@
+# The WAO manager serves NHC admission, and OLM installs that registration with WAO.
+# Thus the NHC operand has no admission configuration of its own.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: node-healthcheck-validating-webhook-configuration
+$patch: delete

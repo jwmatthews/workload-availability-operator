@@ -200,3 +200,19 @@ func TestWAOServiceAccountReadsInfrastructureOnly(t *testing.T) {
 		t.Errorf("WAO ServiceAccount verbs for infrastructures = %v, want [get list watch]", verbs)
 	}
 }
+
+// WAO never renders or reconciles the central registration.
+func TestNHCRuntimeManifestsHaveNoAdmissionConfiguration(t *testing.T) {
+	objects := readRepoFile(t, "internal/operands/manifests/nhc/objects.yaml")
+	for _, kind := range []string{"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"} {
+		if strings.Contains(objects, "kind: "+kind) {
+			t.Errorf("NHC runtime manifests contain a %s", kind)
+		}
+	}
+	// The unchanged NHC image still starts its webhook listener, so its Service and certificate stay.
+	for _, want := range []string{"name: node-healthcheck-webhook-service", "node-healthcheck-webhook-server-cert"} {
+		if !strings.Contains(objects, want) {
+			t.Errorf("NHC runtime manifests lost %q", want)
+		}
+	}
+}

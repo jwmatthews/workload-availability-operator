@@ -347,7 +347,7 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 			g.Expect(c).NotTo(BeNil())
 			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseProgressing)) // envtest has no kubelet or service-ca
 			g.Expect(c.Deployments).To(HaveLen(2))                          // the manager and the console plugin backend of NHC's OCP packaging
-			g.Expect(c.AdmissionReady).To(Equal(ptr.To(false)))
+			g.Expect(c.AdmissionReady).To(Equal(ptr.To(false)))             // the listener callback of this suite reports false here
 		}).Should(Succeed())
 		dep := &appsv1.Deployment{}
 		Eventually(func() error {
@@ -369,10 +369,9 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "node-healthcheck-controller-manager"}, &rbacv1.ClusterRole{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "node-healthcheck-controller-manager"}, &rbacv1.Role{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "node-healthcheck-controller-manager"}, &corev1.ServiceAccount{}))).To(BeTrue())
+		// OLM installs the NHC registration with WAO. The NHC operand renders no admission configuration.
 		vw := &admissionregistrationv1.ValidatingWebhookConfiguration{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-healthcheck-validating-webhook-configuration"}, vw)).To(Succeed())
-		Expect(vw.Webhooks[0].ClientConfig.Service.Namespace).To(Equal(ns))
-		Expect(vw.Annotations["service.beta.openshift.io/inject-cabundle"]).To(Equal("true"))
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "node-healthcheck-validating-webhook-configuration"}, vw))).To(BeTrue())
 	})
 
 	It("updates resources, repairs drift, restores defaults, and isolates other Deployments", func() {
@@ -502,14 +501,15 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		setResources(ctx, v1alpha1.ComponentKeyStorageBasedRemediation, nil)
 	})
 
-	It("removes the NHC operand and reports admission unavailable when disabled", func() {
+	It("removes the NHC operand when disabled and reports central admission", func() {
 		setEnabled(ctx, v1alpha1.ComponentKeyNodeHealthCheck, false)
 		// Status is written after every operand object has been deleted, so wait for it first.
 		Eventually(func(g Gomega) {
 			c := component(getWAC(ctx), v1alpha1.ComponentKeyNodeHealthCheck)
 			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisabled))
+			// WAO serves NHC admission also in the Disabled state. The listener callback of this suite reports false here.
 			g.Expect(c.AdmissionReady).To(Equal(ptr.To(false)))
-			g.Expect(c.Message).To(ContainSubstring("admission"))
+			g.Expect(c.Message).NotTo(ContainSubstring("unavailable while Disabled"))
 		}).Should(Succeed())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "node-healthcheck-controller-manager"}, &appsv1.Deployment{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "node-healthcheck-validating-webhook-configuration"}, &admissionregistrationv1.ValidatingWebhookConfiguration{}))).To(BeTrue())

@@ -123,11 +123,12 @@ func TestSNRAndSBRDeclareAgentOwners(t *testing.T) {
 	}
 }
 
-// The WAO manager serves FAR admission. OLM installs its registration with WAO, so the FAR
-// operand renders no admission configuration. The other operands keep their own webhooks.
-func TestFARAdmissionIsCentral(t *testing.T) {
+// The WAO manager serves FAR and NHC admission. OLM installs their registrations with WAO, so these
+// operands render no admission configuration. The other operands keep their own webhooks.
+func TestFARAndNHCAdmissionIsCentral(t *testing.T) {
+	central := map[string]bool{v1alpha1.ComponentKeyFenceAgentsRemediation: true, v1alpha1.ComponentKeyNodeHealthCheck: true}
 	wantWebhooks := map[string]int{
-		v1alpha1.ComponentKeyNodeHealthCheck: 1, v1alpha1.ComponentKeySelfNodeRemediation: 2,
+		v1alpha1.ComponentKeyNodeHealthCheck: 0, v1alpha1.ComponentKeySelfNodeRemediation: 2,
 		v1alpha1.ComponentKeyStorageBasedRemediation: 0, v1alpha1.ComponentKeyFenceAgentsRemediation: 0,
 		v1alpha1.ComponentKeyMachineDeletionRemediation: 0, v1alpha1.ComponentKeyNodeMaintenance: 1,
 	}
@@ -135,7 +136,7 @@ func TestFARAdmissionIsCentral(t *testing.T) {
 		if len(d.Webhooks) != wantWebhooks[d.Key] {
 			t.Errorf("%s declares %d webhook configurations, want %d", d.Key, len(d.Webhooks), wantWebhooks[d.Key])
 		}
-		if wantCentral := d.Key == v1alpha1.ComponentKeyFenceAgentsRemediation; d.CentralAdmission != wantCentral {
+		if wantCentral := central[d.Key]; d.CentralAdmission != wantCentral {
 			t.Errorf("%s CentralAdmission = %v, want %v", d.Key, d.CentralAdmission, wantCentral)
 		}
 		data, err := os.ReadFile(filepath.Join("..", "operands", "manifests", d.ManifestDir, "objects.yaml"))
