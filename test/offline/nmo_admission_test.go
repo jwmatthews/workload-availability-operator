@@ -3,6 +3,7 @@ package offline
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -60,5 +61,22 @@ func TestWAOServiceAccountHasMinimumVerbsForNMOAdmission(t *testing.T) {
 	verbs := wao["nodemaintenance.medik8s.io/nodemaintenances"]
 	if !slices.Equal(verbs, []string{"get", "list", "watch"}) {
 		t.Errorf("WAO ServiceAccount verbs for nodemaintenances = %v, want [get list watch]", verbs)
+	}
+}
+
+// WAO never renders or reconciles the central registration.
+func TestNMORuntimeManifestsHaveNoAdmissionConfiguration(t *testing.T) {
+	objects := readRepoFile(t, "internal/operands/manifests/nmo/objects.yaml")
+	for _, kind := range []string{"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"} {
+		if strings.Contains(objects, "kind: "+kind) {
+			t.Errorf("NMO runtime manifests contain a %s", kind)
+		}
+	}
+	// The unchanged NMO image still starts its webhook listener, so its Service and certificate stay.
+	kept := []string{"name: node-maintenance-operator-webhook-service", "node-maintenance-operator-webhook-server-cert"}
+	for _, want := range kept {
+		if !strings.Contains(objects, want) {
+			t.Errorf("NMO runtime manifests lost %q", want)
+		}
 	}
 }

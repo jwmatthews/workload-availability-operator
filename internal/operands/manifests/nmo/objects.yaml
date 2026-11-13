@@ -153,35 +153,3 @@ spec:
           secret:
             defaultMode: 420
             secretName: node-maintenance-operator-webhook-server-cert
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  annotations:
-    service.beta.openshift.io/inject-cabundle: "true"
-  labels:
-    node-maintenance-operator: ""
-    workloadavailability.medik8s.io/component: nodeMaintenance
-  name: node-maintenance-operator-validating-webhook-configuration
-webhooks:
-  - admissionReviewVersions:
-      - v1
-    clientConfig:
-      service:
-        name: node-maintenance-operator-webhook-service
-        namespace: __WAO_NAMESPACE__
-        path: /validate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance
-    failurePolicy: Fail
-    name: vnodemaintenance.kb.io
-    rules:
-      - apiGroups:
-          - nodemaintenance.medik8s.io
-        apiVersions:
-          - v1beta1
-        operations:
-          - CREATE
-          - UPDATE
-        resources:
-          - nodemaintenances
-    sideEffects: None
-    timeoutSeconds: 15

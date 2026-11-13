@@ -22,7 +22,7 @@ type webhookEntry struct {
 }
 
 // markerEntries reads config/webhook/manifests.yaml, which controller-gen writes from the
-// markers of the copied operand webhook files (FAR and NHC).
+// markers of the copied operand webhook files (FAR, NHC and NMO).
 func markerEntries(t *testing.T) map[string]webhookEntry {
 	t.Helper()
 	entries := map[string]webhookEntry{}

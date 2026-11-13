@@ -603,12 +603,12 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		svc := &corev1.Service{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "machine-deletion-remediation-controller-manager-metrics-service"}, svc)).To(Succeed())
 		Expect(svc.Spec.Selector).To(HaveKeyWithValue("workloadavailability.medik8s.io/component", v1alpha1.ComponentKeyMachineDeletionRemediation))
-		// OLM installs the FAR registration with WAO. The FAR operand renders no admission configuration.
-		for _, name := range []string{"fence-agents-remediation-mutating-webhook-configuration", "fence-agents-remediation-validating-webhook-configuration"} {
+		// OLM installs the FAR and NMO registrations with WAO. These operands render no admission configuration.
+		for _, name := range []string{"fence-agents-remediation-mutating-webhook-configuration", "fence-agents-remediation-validating-webhook-configuration",
+			"node-maintenance-operator-validating-webhook-configuration"} {
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &admissionregistrationv1.MutatingWebhookConfiguration{}))).To(BeTrue(), name)
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &admissionregistrationv1.ValidatingWebhookConfiguration{}))).To(BeTrue(), name)
 		}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-maintenance-operator-validating-webhook-configuration"}, &admissionregistrationv1.ValidatingWebhookConfiguration{})).To(Succeed())
 		for _, key := range []string{v1alpha1.ComponentKeyFenceAgentsRemediation, v1alpha1.ComponentKeyMachineDeletionRemediation, v1alpha1.ComponentKeyNodeMaintenance} {
 			setEnabled(ctx, key, false)
 		}
@@ -621,7 +621,8 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 	})
 
 	It("reports a NodeMaintenance left behind by a disabled NMO as retained", func() {
-		// Created while NMO is Disabled: its Fail-policy webhook would otherwise need a backend.
+		// This suite has no NMO registration: on a cluster, OLM installs it with WAO and the WAO manager
+		// validates the create in each component state.
 		nm := &unstructured.Unstructured{}
 		nm.SetGroupVersionKind(schema.GroupVersionKind{Group: "nodemaintenance.medik8s.io", Version: "v1beta1", Kind: "NodeMaintenance"})
 		nm.SetName("wao-test-maintenance")
