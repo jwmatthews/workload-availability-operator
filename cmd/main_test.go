@@ -40,6 +40,7 @@ const (
 	testNamespace   = "wao-main-test"
 	validatePath    = "/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation"
 	nhcValidatePath = "/validate-remediation-medik8s-io-v1alpha1-nodehealthcheck"
+	nmoValidatePath = "/validate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance"
 )
 
 type mainEnv struct {
@@ -334,5 +335,34 @@ func TestManagerServesFARAdmission(t *testing.T) {
 			t.Errorf("NodeHealthCheck with maxUnhealthy %q: allowed = %v, message %q, want message %q",
 				maxUnhealthy, out.Response.Allowed, out.Response.Status.Message, wantMessage)
 		}
+	}
+
+	// The same listener serves the NMO validator. It reads the Node from the API server, which has no Node.
+	review := `{"apiVersion":"admission.k8s.io/v1","kind":"AdmissionReview","request":{"uid":"wao-main-test",
+"kind":{"group":"nodemaintenance.medik8s.io","version":"v1beta1","kind":"NodeMaintenance"},"operation":"CREATE",
+"object":{"apiVersion":"nodemaintenance.medik8s.io/v1beta1","kind":"NodeMaintenance",
+"metadata":{"name":"wao-main-test"},"spec":{"nodeName":"wao-main-test-absent","reason":"wao-main-test"}}}}`
+	resp, err = httpClient.Post(fmt.Sprintf("https://127.0.0.1:%d%s", webhookPort, nmoValidatePath),
+		"application/json", strings.NewReader(review))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	var out struct {
+		Response struct {
+			Allowed bool `json:"allowed"`
+			Status  struct {
+				Message string `json:"message"`
+			} `json:"status"`
+		} `json:"response"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &out) != nil {
+		t.Fatalf("NodeMaintenance: HTTP %d: %s", resp.StatusCode, body)
+	}
+	const wantMessage = "invalid nodeName, no node with name wao-main-test-absent found"
+	if out.Response.Allowed || !strings.Contains(out.Response.Status.Message, wantMessage) {
+		t.Errorf("NodeMaintenance for an absent node: allowed = %v, message %q, want message %q",
+			out.Response.Allowed, out.Response.Status.Message, wantMessage)
 	}
 }
