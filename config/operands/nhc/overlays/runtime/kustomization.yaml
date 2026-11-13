@@ -1,5 +1,6 @@
-# Runtime objects WAO applies when the component is enabled: Deployments, Services, ConfigMaps and
-# webhook configurations. `make operand-manifests` builds this, drops every other kind, and writes
+# Runtime objects WAO applies when the component is enabled: Deployments, Services and ConfigMaps.
+# NHC has no webhook configuration here: the WAO manager serves NHC admission (docs/nhc-webhooks.md).
+# `make operand-manifests` builds this, drops every other kind, and writes
 # internal/operands/manifests/nhc/objects.yaml. The namespace and image placeholders
 # are replaced by the Go renderer at reconcile time.
 #
@@ -47,6 +48,6 @@ patches:
     target:
       kind: Service
       name: node-healthcheck-webhook-service
-  - path: webhook_validating_patch.yaml
+  - path: webhook_configurations_delete_patch.yaml
     target:
       kind: ValidatingWebhookConfiguration
