@@ -2050,6 +2050,7 @@ spec:
             - nodemaintenances
       sideEffects: None
       targetPort: 9443
+      timeoutSeconds: 15
       type: ValidatingAdmissionWebhook
       webhookPath: /validate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance
   icon:

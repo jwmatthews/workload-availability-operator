@@ -77,12 +77,13 @@ func TestNHCCSVHasOneCentralWebhookDefinition(t *testing.T) {
 		t.Errorf("marker entry differs from the table:\n got %+v\nwant %+v", marker, want)
 	}
 
-	checkCSVDefinition(t, want, "NHC")
+	checkCSVDefinition(t, want, "NHC", 0)
 }
 
 // checkCSVDefinition checks that the bundle CSV has exactly one definition with the name of want,
-// that it agrees with want, and that it points at the WAO Deployment.
-func checkCSVDefinition(t *testing.T, want webhookEntry, operand string) {
+// that it agrees with want, and that it points at the WAO Deployment. timeoutSeconds is the timeout
+// that the operand sets for the entry; 0 means that the operand sets none (the API server default).
+func checkCSVDefinition(t *testing.T, want webhookEntry, operand string, timeoutSeconds int64) {
 	t.Helper()
 	name := want.Name
 	count := 0
@@ -112,7 +113,12 @@ func checkCSVDefinition(t *testing.T, want webhookEntry, operand string) {
 		if fmt.Sprint(d["targetPort"]) != "9443" {
 			t.Errorf("targetPort = %v, want 9443", d["targetPort"])
 		}
-		notSet := []string{"objectSelector", "matchPolicy", "timeoutSeconds", "reinvocationPolicy", "conversionCRDs"}
+		notSet := []string{"objectSelector", "matchPolicy", "reinvocationPolicy", "conversionCRDs"}
+		if timeoutSeconds == 0 {
+			notSet = append(notSet, "timeoutSeconds")
+		} else if fmt.Sprint(d["timeoutSeconds"]) != fmt.Sprint(timeoutSeconds) {
+			t.Errorf("timeoutSeconds = %v, want %d as %s sets it", d["timeoutSeconds"], timeoutSeconds, operand)
+		}
 		for _, absent := range notSet {
 			if _, set := d[absent]; set {
 				t.Errorf("%s is set; %s does not set it", absent, operand)

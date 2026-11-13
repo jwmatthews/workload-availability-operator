@@ -14,3 +14,14 @@ resources:
 - service.yaml
 configurations:
 - kustomizeconfig.yaml
+# NMO sets this timeout with the same patch in its config/webhook/kustomization.yaml. A marker cannot
+# hold it, so the WAO registration needs the patch to keep the NMO value. See docs/nmo-webhooks.md.
+patches:
+- patch: |-
+    apiVersion: admissionregistration.k8s.io/v1
+    kind: ValidatingWebhookConfiguration
+    metadata:
+      name: validating-webhook-configuration
+    webhooks:
+      - name: vnodemaintenance.kb.io
+        timeoutSeconds: 15

@@ -19,6 +19,7 @@ NMO has one entry. It has no mutating webhook, no defaulter and no conversion we
 | Operations | `CREATE`, `UPDATE` |
 | `failurePolicy` | `Fail` |
 | `sideEffects` | `None` |
+| `timeoutSeconds` | 15 |
 | AdmissionReview versions | `v1` |
 
 - The entry has no `DELETE` operation. A delete of a `NodeMaintenance` needs no WAO replica.
@@ -34,6 +35,9 @@ The registration is part of the WAO installation. It is not an operand object.
 2. `make manifests` writes `config/webhook/manifests.yaml` from the markers of all copied files.
 3. `make bundle-reset` gives that file to operator-sdk, which writes the `spec.webhookdefinitions` entries of the bundle CSV.
 4. The installer creates the Service, the serving certificate and the admission configuration.
+
+NMO sets the timeout of 15 seconds with a kustomize patch, not with the marker. `config/webhook/kustomization.yaml` has the same patch for the WAO registration.
+Without the patch, the entry gets the API server default of 10 seconds. `test/offline` compares the CSV value with the copied NMO configuration.
 
 - Do not change `failurePolicy`.
 - WAO does not apply, own, or delete the registration. The registration has no `WorkloadAvailabilityConfig` owner reference.
@@ -148,8 +152,9 @@ The NMO admission tests are in these groups:
 3. Copy the three files again. Apply the adaptations that [SOURCE.md](../internal/webhooks/nmo/SOURCE.md) lists.
 4. Update `SOURCE.md`. Run its `diff` command.
 5. Read each client call of the new validator. If the handler reads a new resource, add the minimum verb to the RBAC markers in `internal/webhooks/nmo/setup.go` and update the security record.
-6. Run `make manifests` and `make bundle-reset`. Review each change of the webhook definitions and of `config/rbac/role.yaml`.
-7. Run the checks in the table.
+6. Compare the patches in `config/operands/nmo/config/webhook/kustomization.yaml` with the NMO patch in `config/webhook/kustomization.yaml`.
+7. Run `make manifests` and `make bundle-reset`. Review each change of the webhook definitions and of `config/rbac/role.yaml`.
+8. Run the checks in the table.
 
 ## Operation on a cluster
 
@@ -207,6 +212,7 @@ The 4 dry-run checks: a node name that does not exist (rejected by rule 1), a wo
 | Deletion of the `WorkloadAvailabilityConfig` | The NMO entry stayed (same UID). 4 of 4 checks passed without the object. |
 | Replacement of the two WAO Pods, one at a time | 608 dry-run requests during the replacement. 607 passed. 1 request failed with a TLS handshake timeout between the client and the API server, before admission. The new WAO Pods made the default config again. |
 | Uninstall with `make dev-olm-undeploy` | The 6 registrations were removed. A seeded foreign configuration with the legacy NMO name was unchanged. The medik8s CRDs were removed. The 6 nodes were `Ready`. |
+| Second installation, from the commit that keeps the NMO timeout | The first installation had the API server default of 10 seconds for the NMO entry. The second installation had `timeoutSeconds: 15` for `vnodemaintenance.kb.io` and 10 for the FAR and NHC entries. 4 of 4 dry-run checks passed with NMO `Disabled`. The uninstall removed the 6 registrations. The other rows of this table are from the first installation. |
 
 Not done ([issue 23](https://github.com/jwmatthews/workload-availability-operator/issues/23)):
 
