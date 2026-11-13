@@ -6,12 +6,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-export REG="${REG:-quay.io/jwmatthews}"
-export VERSION="${VERSION:-0.1.0-20261031b}"
-export IMG="${IMG:-$REG/workload-availability-operator:v$VERSION}"
-export BUNDLE_IMG="${BUNDLE_IMG:-$REG/workload-availability-operator-bundle:v$VERSION}"
-export CATALOG_IMG="${CATALOG_IMG:-$REG/workload-availability-operator-catalog:v$VERSION}"
-export KUBECONFIG="${KUBECONFIG:-$PWD/jmatthews-rhwa-ocp5-rc6.kubeconfig}"
+export REG="${REG:-ttl.sh}"
+export TTL="${TTL:-24h}"
+export IMG_USER="${IMG_USER:-$(id -un | tr '[:upper:]' '[:lower:]')}"
+export VERSION="${VERSION:-0.1.0-$(date +%Y%m%d%H%M)}"
+export IMG="${IMG:-$REG/$IMG_USER-workload-availability-operator-v$VERSION:$TTL}"
+export BUNDLE_IMG="${BUNDLE_IMG:-$REG/$IMG_USER-workload-availability-operator-bundle-v$VERSION:$TTL}"
+export CATALOG_IMG="${CATALOG_IMG:-$REG/$IMG_USER-workload-availability-operator-catalog-v$VERSION:$TTL}"
 
 # Confirm KUBECONFIG reaches the cluster before spending time on builds.
 if ! oc whoami; then
@@ -26,7 +27,10 @@ make docker-push
 make bundle-build
 make bundle-push
 
-grep -n 'workload-availability-operator:' bundle/manifests/*.clusterserviceversion.yaml
+if ! grep -nF -- "$IMG" bundle/manifests/*.clusterserviceversion.yaml; then
+  printf 'ERROR: generated bundle does not contain the expected operator image: %s\n' "$IMG" >&2
+  exit 1
+fi
 
 make catalog-build
 make catalog-push
