@@ -407,3 +407,47 @@ Each commit must pass `make check`. Run `make test-offline` and `make test` on a
 | 9 | docs: add `docs/nhc-webhooks.md` and update the overview documents | Review |
 | 10 | docs: add classic OLM acceptance results. Only after the user names a disposable cluster. Server-side dry-run only. | Results table in `docs/nhc-webhooks.md` |
 | 11 | Optional: OLM v1 acceptance results on the same cluster | Results table |
+
+## 6. Implementation record (2026-11-13)
+
+The sequence of section 5 is complete except OLM v1 acceptance (commit 11). The branch is local.
+
+| Plan commit | Result |
+| --- | --- |
+| 1 | `docs: add the plan for NHC admission webhooks in WAO` |
+| 2 | `Share the admission client and the listener readiness between components` |
+| 3 and 5 | One commit, `Initialize NHC admission in each WAO replica`. The marker of the copied file changes the bundle, so the copy and the registration could not be separate. |
+| 4 | `Test the NHC validation behavior that WAO preserves` |
+| 6 | `Move NHC admission registration to the WAO installation` |
+| 6a | `Report the NodeHealthChecks that admission blocks while NHC is Disabled` |
+| 6b | `Clear the remediation status before the purge scripts delete a NodeHealthCheck` |
+| 7 | `Test the registered NHC handler through an API server` |
+| 8 | `Test the NHC admission wiring of the manager binary` |
+| 9 and 10 | `docs: add NHC admission operation notes and classic OLM acceptance results` |
+
+Differences from the plan text:
+
+- Section 3.3 planned `get` on `infrastructures`. The RBAC marker of the copied file `cluster/capabilities.go` gives `get`, `list` and `watch`. The file has no change, so WAO has the three verbs.
+- Section 3.4: `cmd/main.go` adds the readiness check one time with `listener.AddReadyCheck`. The `Initialize` functions of FAR and NHC do not add it.
+- Section 3.7a: the definition field is `AdmissionBlock` (a condition function and a message), not `BlockedByStatus`.
+- `ENVTEST_PACKAGES` and the race detector run use `./internal/webhooks/...`, so a new component needs no Makefile change.
+- The NHC module requires `cel-go` v0.29.0. WAO had v0.26.0 as an indirect requirement.
+
+Answers to the unknowns:
+
+- R4: a deletion of the `NodeHealthCheck` CRD completes when no listener serves, also with an object that shows a remediation (envtest, Kubernetes 1.29 and 1.36). A direct delete of a `NodeHealthCheck` needs a WAO replica.
+- R8: see the risk text.
+
+Issues for the concerns:
+
+| Issue | Subject |
+| --- | --- |
+| [9](https://github.com/jwmatthews/workload-availability-operator/issues/9) | A `NodeHealthCheck` with a remediation status while NHC is `Disabled` (D1) |
+| [10](https://github.com/jwmatthews/workload-availability-operator/issues/10) | Template kinds that are not in the WAO bundle (D2), and `Metal3RemediationTemplate` on OpenShift |
+| [11](https://github.com/jwmatthews/workload-availability-operator/issues/11) | No removal of a registration that a previous build rendered (R8) |
+| [12](https://github.com/jwmatthews/workload-availability-operator/issues/12) | Unused webhook listener of the NHC operand (R10) |
+| [13](https://github.com/jwmatthews/workload-availability-operator/issues/13) | Startup dependency on the `Infrastructure` object (R2) |
+| [14](https://github.com/jwmatthews/workload-availability-operator/issues/14) | The annotation check reads the presence, not the value |
+| [15](https://github.com/jwmatthews/workload-availability-operator/issues/15) | No live cluster evidence for `UPDATE` and `DELETE` (R6) |
+| [16](https://github.com/jwmatthews/workload-availability-operator/issues/16) | A `NodeHealthCheck` delete needs a WAO replica (R4) |
+| [17](https://github.com/jwmatthews/workload-availability-operator/issues/17) | Dependency changes (R3) |
