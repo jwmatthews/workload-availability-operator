@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // The table from docs/nmo-webhooks.md. The marker and the CSV must agree with it.
@@ -34,7 +35,14 @@ func TestNMOCSVHasOneCentralWebhookDefinition(t *testing.T) {
 		t.Errorf("marker entry differs from the table:\n got %+v\nwant %+v", marker, want)
 	}
 
-	checkCSVDefinition(t, want, "NMO")
+	// NMO sets a timeout of 15 seconds for its entry (config/operands/nmo/config/webhook/kustomization.yaml).
+	// The WAO registration keeps it: the WAO handler reads from the API server for each request.
+	checkCSVDefinition(t, want, "NMO", 15)
+	upstream := readRepoFile(t, "config/operands/nmo/config/webhook/kustomization.yaml")
+	if !strings.Contains(upstream, "timeoutSeconds: 15") {
+		t.Error("the copied NMO configuration has a different webhook timeout; " +
+			"update config/webhook/kustomization.yaml and this test")
+	}
 }
 
 // NMO admission reads a Node and lists the Pods and PodDisruptionBudgets of openshift-etcd.
@@ -43,6 +51,20 @@ func TestNMOCSVHasOneCentralWebhookDefinition(t *testing.T) {
 // cordon and a drain of a node, which admission must not do.
 func TestWAOServiceAccountHasMinimumVerbsForNMOAdmission(t *testing.T) {
 	wao := waoClusterRules(t)
+	// The namespaced rules of the WAO ServiceAccount must not add a verb on these resources.
+	csv := readResourceYAML(t, "bundle/manifests/"+waoCSVFile)
+	namespaced, _, _ := unstructured.NestedSlice(csv, "spec", "install", "spec", "permissions")
+	for _, raw := range namespaced {
+		rules, _, _ := unstructured.NestedSlice(raw.(map[string]any), "rules")
+		for _, rawRule := range rules {
+			resources, _, _ := unstructured.NestedStringSlice(rawRule.(map[string]any), "resources")
+			for _, r := range resources {
+				if r == "*" || r == "nodes" || strings.HasPrefix(r, "pods") || r == "poddisruptionbudgets" {
+					t.Errorf("a namespaced rule in the CSV has the resource %q; decision N1 has cluster rules only", r)
+				}
+			}
+		}
+	}
 	for resource, want := range map[string][]string{
 		"/nodes":                      {"get"},
 		"/pods":                       {"list"},

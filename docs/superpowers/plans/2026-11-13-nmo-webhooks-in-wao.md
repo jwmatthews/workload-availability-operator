@@ -45,6 +45,7 @@ NMO has one webhook. It has no mutating webhook, no defaulter and no conversion 
 | Operations | `CREATE`, `UPDATE` |
 | `failurePolicy` | `Fail` |
 | `sideEffects` | `None` |
+| `timeoutSeconds` | 15, from a patch in `config/webhook/kustomization.yaml` of NMO. The first version of this plan did not have this row. See section 6. |
 | AdmissionReview versions | `v1` |
 
 ### Upstream files
@@ -321,6 +322,8 @@ Differences from the plan text:
 - Section 3.7: the envtest suite has no step for a second replica. The NHC suite has none, and the FAR suite tests the shared listener. The cluster acceptance sent requests to the replica that is not the leader.
 - Section 3.7: `test/offline` has a shared function `checkCSVDefinition` for NHC and NMO. The lint check rejected the duplicate code.
 - controller-gen puts `nodes` and `secrets` into one rule, because the two have the verb `get`. The test `TestWAOServiceAccountSecretPermissionIsGetOnly` now accepts a rule with other resources if the only verb is `get`.
+- Section 3.7 named `internal/operands/render_test.go`. That file has no expectation of the NMO registration, so it has no change.
+- Section 1 did not list the NMO webhook timeout of 15 seconds. The review of the branch found that the WAO registration had the API server default of 10 seconds. `config/webhook/kustomization.yaml` now has the NMO patch, and `test/offline` checks the value. The first cluster acceptance ran with 10 seconds. A second installation checked the value 15 on the cluster.
 - `go mod tidy` changed only the NMO module line in `go.mod`. No other requirement changed.
 - Section 3.9, step 1: the cluster had no WAO installation at the start, so no removal was necessary.
 

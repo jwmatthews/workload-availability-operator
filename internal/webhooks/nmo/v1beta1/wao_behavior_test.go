@@ -180,11 +180,12 @@ func TestWAOQuorumRuleReadsOnlyTheEtcdNamespace(t *testing.T) {
 		isOpenShift bool
 		node        string
 		wantLists   []string
+		wantGets    int
 	}{
-		"worker on OpenShift":          {true, waoWorker, []string{"NodeMaintenanceList namespace="}},
-		"control plane, not OpenShift": {false, waoControlPlane, []string{"NodeMaintenanceList namespace="}},
+		"worker on OpenShift":          {true, waoWorker, []string{"NodeMaintenanceList namespace="}, 2},
+		"control plane, not OpenShift": {false, waoControlPlane, []string{"NodeMaintenanceList namespace="}, 1},
 		"control plane on OpenShift": {true, waoControlPlane, []string{"NodeMaintenanceList namespace=",
-			"PodDisruptionBudgetList namespace=openshift-etcd", "PodList namespace=openshift-etcd"}},
+			"PodDisruptionBudgetList namespace=openshift-etcd", "PodList namespace=openshift-etcd"}, 2},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reads := &waoReads{}
@@ -194,6 +195,10 @@ func TestWAOQuorumRuleReadsOnlyTheEtcdNamespace(t *testing.T) {
 			}
 			if strings.Join(reads.lists, ";") != strings.Join(tc.wantLists, ";") {
 				t.Errorf("lists = %v, want %v", reads.lists, tc.wantLists)
+			}
+			// The validator reads the Node one time for rule 1, and one more time for rule 3 on OpenShift.
+			if len(reads.gets) != tc.wantGets {
+				t.Errorf("gets = %v, want %d", reads.gets, tc.wantGets)
 			}
 			for _, get := range reads.gets {
 				if get != "Node /"+tc.node {
