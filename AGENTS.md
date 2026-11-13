@@ -60,7 +60,7 @@ gone; do not recreate them.
 
 ```sh
 KUBECONFIG=/path/to/disposable.kubeconfig make dev-olm-deploy    # build, push, install with operator-sdk run bundle
-KUBECONFIG=/path/to/disposable.kubeconfig make dev-olm-undeploy  # operator-sdk cleanup --delete-all; CRDs stay
+KUBECONFIG=/path/to/disposable.kubeconfig make dev-olm-undeploy  # operator-sdk cleanup --delete-all, which also deletes the owned CRDs and their custom resources
 ```
 
 - The targets live in `dev/dev.mk` of medik8s/tools, found at `../tools` or set
