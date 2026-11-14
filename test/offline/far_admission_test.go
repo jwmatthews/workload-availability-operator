@@ -108,6 +108,9 @@ func TestFARCSVHasFourCentralWebhookDefinitions(t *testing.T) {
 				if _, nmo := nmoAdmissionTable[name]; nmo {
 					continue // nmo_admission_test.go checks the NMO definition.
 				}
+				if _, snr := snrAdmissionTable[name]; snr {
+					continue // snr_admission_test.go checks the SNR definitions.
+				}
 				row, known := farAdmissionTable[name]
 				if !known || seen[name] {
 					t.Fatalf("unexpected or repeated webhook definition %q", name)
