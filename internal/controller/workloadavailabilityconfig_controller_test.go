@@ -585,7 +585,8 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 	})
 
 	It("deletes the SNR agent DaemonSet on disable but keeps reporting the config CR", func() {
-		// Create the config before enabling: envtest has no operand webhook server.
+		// Simulate what the SNR manager creates at runtime. This suite installs no admission registration,
+		// so the API server accepts the config without the SNR validator.
 		cfg := &unstructured.Unstructured{}
 		cfg.SetGroupVersionKind(schema.GroupVersionKind{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationConfig"})
 		cfg.SetName("self-node-remediation-config")
@@ -598,6 +599,11 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "self-node-remediation-controller-manager"}, &appsv1.Deployment{})
 		}).Should(Succeed())
+		// OLM installs the SNR registrations with WAO. The SNR operand renders no admission configuration.
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "self-node-remediation-mutating-webhook-configuration"},
+			&admissionregistrationv1.MutatingWebhookConfiguration{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "self-node-remediation-validating-webhook-configuration"},
+			&admissionregistrationv1.ValidatingWebhookConfiguration{}))).To(BeTrue())
 		ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "self-node-remediation-ds", Namespace: ns,
 			Labels: map[string]string{"k8s-app": "self-node-remediation"},
 			OwnerReferences: []metav1.OwnerReference{{APIVersion: "self-node-remediation.medik8s.io/v1alpha1", Kind: "SelfNodeRemediationConfig",
@@ -638,6 +644,9 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 			g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(ds), &appsv1.DaemonSet{}))).To(BeTrue())
 			c := component(getWAC(ctx), v1alpha1.ComponentKeySelfNodeRemediation)
 			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisableIncomplete))
+			// WAO serves SNR admission also in the Disabled state.
+			g.Expect(c.AdmissionReady).NotTo(BeNil())
+			g.Expect(c.Message).NotTo(ContainSubstring("unavailable while Disabled"))
 			g.Expect(strings.Join(c.RetainedResources, "\n")).To(ContainSubstring("SelfNodeRemediationConfig " + ns + "/self-node-remediation-config"))
 			g.Expect(strings.Join(c.RetainedResources, "\n")).NotTo(ContainSubstring("self-node-remediation-ds"))
 		}).Should(Succeed())

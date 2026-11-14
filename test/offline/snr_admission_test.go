@@ -162,3 +162,20 @@ func TestWAODeploymentSetsTheNamespaceForSNRAdmission(t *testing.T) {
 		t.Error("the WAO Deployment in the CSV does not set OPERATOR_NAMESPACE")
 	}
 }
+
+// WAO never renders or reconciles the central registration.
+func TestSNRRuntimeManifestsHaveNoAdmissionConfiguration(t *testing.T) {
+	objects := readRepoFile(t, "internal/operands/manifests/snr/objects.yaml")
+	for _, kind := range []string{"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"} {
+		if strings.Contains(objects, "kind: "+kind) {
+			t.Errorf("SNR runtime manifests contain a %s", kind)
+		}
+	}
+	// The unchanged SNR image still starts its webhook listener, so its Service and certificate stay.
+	kept := []string{"name: self-node-remediation-webhook-service", "self-node-remediation-webhook-server-cert"}
+	for _, want := range kept {
+		if !strings.Contains(objects, want) {
+			t.Errorf("SNR runtime manifests lost %q", want)
+		}
+	}
+}

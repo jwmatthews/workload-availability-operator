@@ -8,14 +8,11 @@ import (
 func SNR() Definition {
 	return Definition{
 		Key: v1alpha1.ComponentKeySelfNodeRemediation, ShortName: "snr", ManifestDir: "snr",
-		ManagerDeployment: "self-node-remediation-controller-manager",
-		ManagerContainer:  "manager",
-		Deployments:       []string{"self-node-remediation-controller-manager"},
-		Images:            []string{images.SNRManager},
-		Webhooks: []WebhookConfiguration{
-			{Kind: "ValidatingWebhookConfiguration", Name: "self-node-remediation-validating-webhook-configuration"},
-			{Kind: "MutatingWebhookConfiguration", Name: "self-node-remediation-mutating-webhook-configuration"},
-		},
+		ManagerDeployment:      "self-node-remediation-controller-manager",
+		ManagerContainer:       "manager",
+		Deployments:            []string{"self-node-remediation-controller-manager"},
+		Images:                 []string{images.SNRManager},
+		CentralAdmission:       true,
 		AgentOwners:            []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationConfig"}},
 		ManagedKinds:           []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediation"}},
 		AgentDaemonSetSelector: map[string]string{"k8s-app": "self-node-remediation"},

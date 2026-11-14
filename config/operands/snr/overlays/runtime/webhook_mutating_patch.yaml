@@ -1,6 +1,0 @@
-apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: self-node-remediation-mutating-webhook-configuration
-  annotations:
-    service.beta.openshift.io/inject-cabundle: "true"
