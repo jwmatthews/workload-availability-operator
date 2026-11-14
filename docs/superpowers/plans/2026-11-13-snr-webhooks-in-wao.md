@@ -392,3 +392,50 @@ The markers of the copied files change the bundle. Thus the copy and the registr
 | 8 | docs: add classic OLM acceptance results (section 3.9) and the implementation record. Server-side dry-run only. | Results table in `docs/snr-webhooks.md` |
 
 Not in this plan: OLM v1 acceptance, SBR admission, a change of the listener TLS settings, a rebase, a push.
+
+## 8. Implementation record (2026-11-14)
+
+The sequence of section 7 is complete. The branch is local.
+
+| Plan commit | Result |
+| --- | --- |
+| 1 | `docs: add the plan for the SNR admission webhooks in WAO` |
+| 2 | `Initialize SNR admission in each WAO replica` |
+| 3 | `Test the SNR defaulting and validation behavior that WAO preserves` |
+| 4 | `Move SNR admission registration to the WAO installation` |
+| 5 | `Test the registered SNR handlers through an API server` |
+| 6 | `Test the SNR admission wiring of the manager binary` |
+| 7 and 8 | `docs: add SNR admission operation notes and classic OLM acceptance results` |
+
+Differences from the plan text:
+
+- Section 3.7 did not list the envtest suite of NHC. That suite installs all registrations of `config/webhook/manifests.yaml` and serves only the NHC handler.
+  Its duplicate-kind test used an SNR template, which now has a mutating entry with `Fail`. The test now uses the kind `MachineDeletionRemediationTemplate`, which has no admission webhook.
+- The same test removed the annotation from an SNR template. In a WAO cluster the SNR defaulter adds the annotation again for each `UPDATE`. `docs/snr-webhooks.md` records this.
+- Section 3.7 named a change of `test/offline/nmo_admission_test.go` and a removal of `snr` from a list in `far_admission_test.go`. The NMO file needed no change. The list in the FAR file checks a different subject and stays.
+  The entry count is in `nhc_admission_test.go`. The FAR test now ignores the SNR definitions.
+- Section 3.7 said that `internal/operands/render_test.go` changes only if it expects an SNR registration. It did: the render order test used the SNR admission configurations. The test now checks that SNR renders none.
+- Section 3.5 named a delete patch with two documents. The patch has one document, and the kustomization applies it to the two kinds, as FAR does.
+- `config/operands/snr/overlays/runtime/webhook_cert_patch.yaml` has a changed comment. It is not in section 4.
+- `go mod tidy` changed only the SNR module line in `go.mod`. No other requirement changed.
+- `make fix-imports` changed the import order of five copied files. The `diff` command of `SOURCE.md` shows it.
+- The setup test for a failed version read needs 10 seconds, because the copied function tries again.
+- After this work, no operand renders an admission configuration. The `Webhooks` field of the component definition has no user. The controller code for it stays.
+
+Answers to the unknowns:
+
+- R6: the garbage collector removed the DaemonSet after the delete of the config with no SNR manager. The config has no finalizer.
+- R4: with two ready WAO replicas, the SNR manager created its config, its template and the DaemonSet. Each component became `Available` in 16 seconds.
+- R5: not measured. The acceptance created no remediation.
+
+Issues for the concerns:
+
+| Issue | Subject |
+| --- | --- |
+| [24](https://github.com/jwmatthews/workload-availability-operator/issues/24) | The SNR remediation path calls the WAO listener through an entry with `Ignore` (R1, R5, S1) |
+| [25](https://github.com/jwmatthews/workload-availability-operator/issues/25) | The SNR manager start and a config delete need a WAO replica (R4) |
+| [26](https://github.com/jwmatthews/workload-availability-operator/issues/26) | A config that is accepted while SNR is `Disabled` starts the agents when SNR is `Enabled` (R6) |
+| [27](https://github.com/jwmatthews/workload-availability-operator/issues/27) | Unused webhook listener of the SNR operand (R7, S5) |
+| [28](https://github.com/jwmatthews/workload-availability-operator/issues/28) | SNR admission reads the namespace from `OPERATOR_NAMESPACE` (R2, R14, S2) |
+| [29](https://github.com/jwmatthews/workload-availability-operator/issues/29) | SNR admission stops each WAO replica when the version read fails (R3, S3) |
+| [30](https://github.com/jwmatthews/workload-availability-operator/issues/30) | No live cluster evidence for `UPDATE` through the API server, the strategy rejection and the `Ignore` behavior (R10) |
