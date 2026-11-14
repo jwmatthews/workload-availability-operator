@@ -1,5 +1,6 @@
-# Runtime objects WAO applies when the component is enabled: Deployment, Services, ConfigMaps and
-# webhook configurations. `make operand-manifests` builds this, drops every other kind, and writes
+# Runtime objects WAO applies when the component is enabled: Deployment, Services and ConfigMaps.
+# SNR has no webhook configuration here: the WAO manager serves SNR admission (docs/snr-webhooks.md).
+# `make operand-manifests` builds this, drops every other kind, and writes
 # internal/operands/manifests/snr/objects.yaml. The namespace and image placeholders
 # are replaced by the Go renderer at reconcile time.
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -32,13 +33,13 @@ patches:
   - path: webhook_cert_patch.yaml
     target:
       kind: Deployment
-  - path: webhook_mutating_patch.yaml
+  - path: webhook_configurations_delete_patch.yaml
     target:
       kind: MutatingWebhookConfiguration
+  - path: webhook_configurations_delete_patch.yaml
+    target:
+      kind: ValidatingWebhookConfiguration
   - path: webhook_service_patch.yaml
     target:
       kind: Service
       name: self-node-remediation-webhook-service
-  - path: webhook_validating_patch.yaml
-    target:
-      kind: ValidatingWebhookConfiguration

@@ -1,0 +1,8 @@
+# The WAO manager serves SNR admission, and OLM installs that registration with WAO.
+# Thus the SNR operand has no admission configuration of its own. The kustomization applies
+# this patch to the mutating and to the validating configuration.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: self-node-remediation-mutating-webhook-configuration
+$patch: delete

@@ -552,8 +552,8 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 	})
 
 	It("reports DisableIncomplete when SNR agents survive a manager-level disable", func() {
-		// Simulate what the SNR manager creates at runtime. Do it while SNR is Disabled: once enabled,
-		// SNR's Fail-policy webhooks are registered and envtest has no backend to answer them.
+		// Simulate what the SNR manager creates at runtime. This suite installs no admission registration,
+		// so the API server accepts the config without the SNR validator.
 		cfg := &unstructured.Unstructured{}
 		cfg.SetGroupVersionKind(schema.GroupVersionKind{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationConfig"})
 		cfg.SetName("self-node-remediation-config")
@@ -571,12 +571,20 @@ var _ = Describe("WorkloadAvailabilityConfig controller", Ordered, func() {
 			g.Expect(component(getWAC(ctx), v1alpha1.ComponentKeySelfNodeRemediation).Phase).To(Equal(v1alpha1.ComponentPhaseProgressing))
 		}).Should(Succeed())
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: "self-node-remediation-controller-manager"}, &appsv1.Deployment{})).To(Succeed())
+		// OLM installs the SNR registrations with WAO. The SNR operand renders no admission configuration.
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "self-node-remediation-mutating-webhook-configuration"},
+			&admissionregistrationv1.MutatingWebhookConfiguration{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "self-node-remediation-validating-webhook-configuration"},
+			&admissionregistrationv1.ValidatingWebhookConfiguration{}))).To(BeTrue())
 
 		setEnabled(ctx, v1alpha1.ComponentKeySelfNodeRemediation, false)
 		Eventually(func(g Gomega) {
 			w := getWAC(ctx)
 			c := component(w, v1alpha1.ComponentKeySelfNodeRemediation)
 			g.Expect(c.Phase).To(Equal(v1alpha1.ComponentPhaseDisableIncomplete))
+			// WAO serves SNR admission also in the Disabled state.
+			g.Expect(c.AdmissionReady).NotTo(BeNil())
+			g.Expect(c.Message).NotTo(ContainSubstring("unavailable while Disabled"))
 			g.Expect(strings.Join(c.RetainedResources, "\n")).To(ContainSubstring("DaemonSet " + ns + "/self-node-remediation-ds"))
 			g.Expect(strings.Join(c.RetainedResources, "\n")).To(ContainSubstring("SelfNodeRemediationConfig " + ns + "/self-node-remediation-config"))
 			g.Expect(meta.FindStatusCondition(w.Status.Conditions, v1alpha1.ConditionAvailable).Reason).To(Equal("DisableIncomplete"))
