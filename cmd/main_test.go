@@ -41,6 +41,7 @@ const (
 	validatePath    = "/validate-fence-agents-remediation-medik8s-io-v1alpha1-fenceagentsremediation"
 	nhcValidatePath = "/validate-remediation-medik8s-io-v1alpha1-nodehealthcheck"
 	nmoValidatePath = "/validate-nodemaintenance-medik8s-io-v1beta1-nodemaintenance"
+	snrValidatePath = "/validate-self-node-remediation-medik8s-io-v1alpha1-selfnoderemediationconfig"
 )
 
 type mainEnv struct {
@@ -364,5 +365,46 @@ func TestManagerServesFARAdmission(t *testing.T) {
 	if out.Response.Allowed || !strings.Contains(out.Response.Status.Message, wantMessage) {
 		t.Errorf("NodeMaintenance for an absent node: allowed = %v, message %q, want message %q",
 			out.Response.Allowed, out.Response.Status.Message, wantMessage)
+	}
+
+	checkSNRAdmission(t, httpClient, fmt.Sprintf("https://127.0.0.1:%d%s", webhookPort, snrValidatePath))
+}
+
+// checkSNRAdmission sends two SelfNodeRemediationConfig requests to the listener of the manager.
+// The singleton rule of SNR reads the namespace from OPERATOR_NAMESPACE of the manager process.
+// The durations are the CRD defaults, which an API server applies before it calls the validator.
+func checkSNRAdmission(t *testing.T, httpClient *http.Client, url string) {
+	t.Helper()
+	const review = `{"apiVersion":"admission.k8s.io/v1","kind":"AdmissionReview","request":{"uid":"wao-main-test",
+"kind":{"group":"self-node-remediation.medik8s.io","version":"v1alpha1","kind":"SelfNodeRemediationConfig"},
+"operation":"CREATE","object":{"apiVersion":"self-node-remediation.medik8s.io/v1alpha1",
+"kind":"SelfNodeRemediationConfig","metadata":{"name":"self-node-remediation-config","namespace":"%s"},
+"spec":{"peerApiServerTimeout":"5s","apiServerTimeout":"5s","peerDialTimeout":"5s","peerRequestTimeout":"7s",
+"apiCheckInterval":"15s","peerUpdateInterval":"15m"}}}}`
+	for namespace, wantMessage := range map[string]string{
+		testNamespace:    "",
+		"wao-main-other": "SelfNodeRemediationConfig is only allowed to be created in the namespace: " + testNamespace,
+	} {
+		resp, err := httpClient.Post(url, "application/json", strings.NewReader(fmt.Sprintf(review, namespace)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		var out struct {
+			Response struct {
+				Allowed bool `json:"allowed"`
+				Status  struct {
+					Message string `json:"message"`
+				} `json:"status"`
+			} `json:"response"`
+		}
+		if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &out) != nil {
+			t.Fatalf("SelfNodeRemediationConfig: HTTP %d: %s", resp.StatusCode, body)
+		}
+		if out.Response.Allowed != (wantMessage == "") || !strings.Contains(out.Response.Status.Message, wantMessage) {
+			t.Errorf("SelfNodeRemediationConfig in %s: allowed = %v, message %q, want message %q",
+				namespace, out.Response.Allowed, out.Response.Status.Message, wantMessage)
+		}
 	}
 }
