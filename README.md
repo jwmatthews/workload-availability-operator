@@ -204,7 +204,8 @@ removed, the operand objects it renders (not the OLM-owned RBAC). Specifically:
   node agent, operand Deployment or webhook configuration. The CRDs are installed
   regardless, because the CSV owns them (D8).
 - Disabling removes the component's webhook configurations along with the manager. A `Fail` webhook without a backend would block even deleting the component's objects, and WAO never switches a webhook to `Ignore`. While a component is disabled its objects are not validated.
-  FAR, NHC and NMO are the exceptions: the WAO manager serves their admission in each state. See [FAR admission webhooks in WAO](docs/far-webhooks.md), [NHC admission webhooks in WAO](docs/nhc-webhooks.md) and [NMO admission webhook in WAO](docs/nmo-webhooks.md).
+  FAR, NHC, NMO and SNR are the exceptions: the WAO manager serves their admission in each state. See [FAR admission webhooks in WAO](docs/far-webhooks.md), [NHC admission webhooks in WAO](docs/nhc-webhooks.md), [NMO admission webhook in WAO](docs/nmo-webhooks.md) and [SNR admission webhooks in WAO](docs/snr-webhooks.md).
+  A `SelfNodeRemediationConfig` that is created while SNR is disabled is validated, but no agent starts until SNR is enabled.
   A `NodeMaintenance` that is created while NMO is disabled is validated, but no controller acts on it until NMO is enabled.
   A `NodeHealthCheck` whose status shows a remediation stays protected while NHC is disabled; the NHC document gives the procedure.
 - Disable is **manager-level**. It does **not** stop what the component created
