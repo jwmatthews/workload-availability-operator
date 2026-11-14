@@ -40,7 +40,7 @@ func csvWebhookDefinitions(t *testing.T) []map[string]any {
 // Each marker of the copied operand files has one CSV definition, and the CSV has no other definition.
 func TestCSVHasOneWebhookDefinitionForEachMarker(t *testing.T) {
 	markers := markerEntries(t)
-	want := len(farAdmissionTable) + len(nhcAdmissionTable) + len(nmoAdmissionTable)
+	want := len(farAdmissionTable) + len(nhcAdmissionTable) + len(nmoAdmissionTable) + len(snrAdmissionTable)
 	if len(markers) != want {
 		t.Fatalf("the copied operand files have %d webhook markers, want %d", len(markers), want)
 	}

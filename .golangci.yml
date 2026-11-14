@@ -45,6 +45,9 @@ linters:
       - internal/webhooks/nhc/annotations
       # Copied from NMO with minimal adaptation; see internal/webhooks/nmo/SOURCE.md.
       - internal/webhooks/nmo/v1beta1
+      # Copied from SNR with minimal adaptation; see internal/webhooks/snr/SOURCE.md.
+      - internal/webhooks/snr/v1alpha1
+      - internal/webhooks/snr/utils
       - third_party$
       - builtin$
       - examples$

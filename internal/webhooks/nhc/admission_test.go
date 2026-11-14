@@ -43,7 +43,12 @@ const (
 )
 
 var (
-	snrTemplateGVK = schema.GroupVersionKind{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationTemplate"}
+	// bundledTemplateGVK is a template kind in the WAO bundle that has no admission webhook. The
+	// registrations of this suite contain the webhooks of the other operands, and this suite serves
+	// only the NHC handler. A SelfNodeRemediationTemplate is not usable here: its mutating entry has
+	// the failurePolicy Fail, and its defaulter adds the annotation again after a removal.
+	bundledTemplateGVK = schema.GroupVersionKind{Group: "machine-deletion-remediation.medik8s.io", Version: "v1alpha1",
+		Kind: "MachineDeletionRemediationTemplate"}
 	// vendorTemplateGVK is a template kind that is not in the WAO bundle.
 	vendorTemplateGVK = schema.GroupVersionKind{Group: "vendor.wao.test", Version: "v1", Kind: "VendorRemediationTemplate"}
 )
@@ -317,14 +322,14 @@ func (s *admissionSuite) rejectInvalid(t *testing.T) {
 			policy.Spec.RemediationTemplate = nil
 		}, "Either RemediationTemplate or at least one EscalatingRemediations must be set"},
 		"template and escalating remediations": {func(policy *nhcapi.NodeHealthCheck) {
-			policy.Spec.EscalatingRemediations = twoTemplates("x", snrTemplateGVK, "a", "b").Spec.EscalatingRemediations[:1]
+			policy.Spec.EscalatingRemediations = twoTemplates("x", bundledTemplateGVK, "a", "b").Spec.EscalatingRemediations[:1]
 		}, "RemediationTemplate and EscalatingRemediations usage is mutual exclusive"},
 		"empty selector": {func(policy *nhcapi.NodeHealthCheck) {
 			policy.Spec.Selector = metav1.LabelSelector{}
 		}, "Selector is mandatory"},
 		"timeout below one minute": {func(policy *nhcapi.NodeHealthCheck) {
 			policy.Spec.RemediationTemplate = nil
-			policy.Spec.EscalatingRemediations = twoTemplates("x", snrTemplateGVK, "a", "b").Spec.EscalatingRemediations[:1]
+			policy.Spec.EscalatingRemediations = twoTemplates("x", bundledTemplateGVK, "a", "b").Spec.EscalatingRemediations[:1]
 			policy.Spec.EscalatingRemediations[0].Timeout = metav1.Duration{Duration: 30 * time.Second}
 		}, "EscalatingRemediation Timeout must be at least one minute"},
 	} {
@@ -339,9 +344,9 @@ func (s *admissionSuite) rejectInvalid(t *testing.T) {
 // The WAO ServiceAccount has list permission on the template kinds in the WAO bundle. The handler
 // reads the current templates for each request.
 func (s *admissionSuite) duplicateBundledKind(t *testing.T) {
-	first := s.createTemplate(t, snrTemplateGVK, "snr-a")
-	s.createTemplate(t, snrTemplateGVK, "snr-b")
-	policy := twoTemplates("wao-snr", snrTemplateGVK, "snr-a", "snr-b")
+	first := s.createTemplate(t, bundledTemplateGVK, "mdr-a")
+	s.createTemplate(t, bundledTemplateGVK, "mdr-b")
+	policy := twoTemplates("wao-mdr", bundledTemplateGVK, "mdr-a", "mdr-b")
 	if err := s.c.Create(s.ctx, policy, client.DryRunAll); err != nil {
 		t.Fatalf("two templates with the annotation were rejected: %v", err)
 	}
@@ -350,7 +355,7 @@ func (s *admissionSuite) duplicateBundledKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantRejected(t, s.c.Create(s.ctx, policy.DeepCopy(), client.DryRunAll),
-		"Using multiple templates of same kind is not supported for this template: duplicate template kind: SelfNodeRemediationTemplate")
+		"Using multiple templates of same kind is not supported for this template: duplicate template kind: MachineDeletionRemediationTemplate")
 }
 
 // Decision D2 of the NHC webhook plan: a template kind that is not in the WAO bundle has no list
