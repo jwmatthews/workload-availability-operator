@@ -15,10 +15,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
-
-      - name: Check the selected Go toolchain
-        run: hack/verify-go-toolchain.sh
+          go-version-file: go.mod
 
       - name: Prepare Go dependencies
         run: go mod download
@@ -47,10 +44,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.5"
-
-      - name: Check the selected Go toolchain
-        run: hack/verify-go-toolchain.sh
+          go-version-file: go.mod
 
       - name: Run the envtest suites
         run: make test-envtest ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}

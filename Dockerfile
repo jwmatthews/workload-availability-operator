@@ -3,8 +3,7 @@ FROM quay.io/konveyor/builder:ubi9-latest AS builder
 
 WORKDIR /workspace
 
-# Select the exact toolchain from go.mod; test/offline checks that they match.
-ENV GOTOOLCHAIN=go1.26.5 \
+ENV GOTOOLCHAIN=auto \
     GOMODCACHE=/go/pkg/mod \
     GOCACHE=/go/build-cache
 
