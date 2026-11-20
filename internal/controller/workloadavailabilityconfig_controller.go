@@ -90,7 +90,7 @@ func (r *WorkloadAvailabilityConfigReconciler) Reconcile(ctx context.Context, re
 
 	statuses := make([]v1alpha1.ComponentStatus, 0, len(components.All()))
 	var errs []error
-	progressing, retained := false, false
+	progressing, retained, admissionPending := false, false, false
 	for _, def := range components.All() {
 		var st v1alpha1.ComponentStatus
 		var err error
@@ -110,6 +110,10 @@ func (r *WorkloadAvailabilityConfigReconciler) Reconcile(ctx context.Context, re
 		if st.Phase == v1alpha1.ComponentPhaseDisableIncomplete {
 			retained = true
 		}
+		if def.CentralAdmission && st.AdmissionReady != nil && !*st.AdmissionReady {
+			// The listener is not a watched source; re-sample it until it serves.
+			admissionPending = true
+		}
 		statuses = append(statuses, st)
 	}
 	joined := errors.Join(errs...)
@@ -127,7 +131,7 @@ func (r *WorkloadAvailabilityConfigReconciler) Reconcile(ctx context.Context, re
 	if joined != nil {
 		return ctrl.Result{}, joined
 	}
-	if progressing {
+	if progressing || admissionPending {
 		return ctrl.Result{RequeueAfter: requeueProgressing}, nil
 	}
 	if retained {
