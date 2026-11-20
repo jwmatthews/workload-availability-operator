@@ -69,9 +69,12 @@ request before it drains a node. The trial below uses NMO.
   webhooks. It preserves webhook failure policies and never changes `Fail` to
   `Ignore`. Objects created by an upstream controller can remain.
 
-Disabling a component stops its manager, but existing agents or native API
-objects can remain active or await that manager. WAO reports detected retained
-objects in `status.components[].retainedResources` with phase `DisableIncomplete`.
+Disabling a component stops its manager. It also deletes SNR agent DaemonSets
+in the install namespace and SBR agent DaemonSets across all namespaces, waiting
+for the managers to stop before removing agents. Other objects created by the component (config CRs,
+native API objects, certificates) can remain active or await that manager. WAO
+reports detected retained objects in `status.components[].retainedResources`
+with phase `DisableIncomplete`.
 Complete active maintenance or remediation before disabling a component.
 See [Enabled and Disabled behavior](../README.md#what-enabled-and-disabled-mean)
 for the component-specific consequences.

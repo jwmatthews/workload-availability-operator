@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -56,7 +57,7 @@ type WorkloadAvailabilityConfigReconciler struct {
 // +kubebuilder:rbac:groups=workloadavailability.medik8s.io,resources=workloadavailabilityconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=workloadavailability.medik8s.io,resources=workloadavailabilityconfigs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups="",resources=services;configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations;mutatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
@@ -244,6 +245,7 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 		return st, err
 	}
 	var skipped []string
+	waitingForManagers := false
 	for i := len(objs) - 1; i >= 0; i-- { // webhooks first, service accounts last
 		o := objs[i]
 		existing := &unstructured.Unstructured{}
@@ -259,8 +261,40 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 			skipped = append(skipped, fmt.Sprintf("%s %s/%s", o.GetKind(), o.GetNamespace(), o.GetName()))
 			continue
 		}
-		if err := r.Delete(ctx, existing); err != nil && !apierrors.IsNotFound(err) {
+		var opts []client.DeleteOption
+		if len(def.AgentDaemonSetSelector) > 0 && o.GetKind() == "Deployment" {
+			// A background delete can leave managers reconciling while their agents
+			// are removed. Keep the Deployment until its ReplicaSets and pods are gone.
+			opts = append(opts, client.PropagationPolicy(metav1.DeletePropagationForeground))
+			waitingForManagers = true
+		}
+		if err := r.Delete(ctx, existing, opts...); err != nil && !apierrors.IsNotFound(err) {
 			return st, fmt.Errorf("delete %s/%s: %w", o.GetKind(), o.GetName(), err)
+		}
+	}
+	if waitingForManagers {
+		st.Phase = v1alpha1.ComponentPhaseProgressing
+		st.Message = "waiting for manager Deployments and pods to terminate before removing agents"
+		return st, nil
+	}
+	if len(def.AgentDaemonSetSelector) > 0 {
+		dsl := &appsv1.DaemonSetList{}
+		opts := append(r.agentListOptions(def), client.MatchingLabels(def.AgentDaemonSetSelector))
+		if err := r.List(ctx, dsl, opts...); err != nil {
+			return st, err
+		}
+		for i := range dsl.Items {
+			ds := &dsl.Items[i]
+			// Foreground deletion preserves the pod termination grace period and keeps
+			// shutdown in progress until dependent agent pods have been removed.
+			if err := r.Delete(ctx, ds, client.PropagationPolicy(metav1.DeletePropagationForeground)); err != nil && !apierrors.IsNotFound(err) {
+				return st, fmt.Errorf("delete DaemonSet %s/%s: %w", ds.Namespace, ds.Name, err)
+			}
+		}
+		if len(dsl.Items) > 0 {
+			st.Phase = v1alpha1.ComponentPhaseProgressing
+			st.Message = "waiting for agent DaemonSets and pods to terminate"
+			return st, nil
 		}
 	}
 	retained, err := r.retainedResources(ctx, def)
@@ -271,7 +305,7 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 	var msgs []string
 	if len(retained) > 0 {
 		st.Phase = v1alpha1.ComponentPhaseDisableIncomplete
-		msgs = append(msgs, "manager removed; agents, configs or native objects it would reconcile remain and need the component's own procedure")
+		msgs = append(msgs, "manager removed; configs or native objects it would reconcile remain and need the component's own procedure")
 	}
 	if len(skipped) > 0 {
 		msgs = append(msgs, fmt.Sprintf("left foreign objects untouched: %v", skipped))
@@ -286,9 +320,18 @@ func (r *WorkloadAvailabilityConfigReconciler) ensureDisabled(ctx context.Contex
 	return st, nil
 }
 
-// retainedResources lists what outlives a manager-level disable: agent DaemonSets owned by
-// component configs and those configs (install namespace), plus native objects of the
-// component's managed kinds anywhere in the cluster.
+// agentListOptions follows the namespace scope supported by the component manager.
+func (r *WorkloadAvailabilityConfigReconciler) agentListOptions(def components.Definition) []client.ListOption {
+	if def.AgentsInAllNamespaces {
+		return nil
+	}
+	return []client.ListOption{client.InNamespace(r.Namespace)}
+}
+
+// retainedResources lists what outlives a manager-level disable: component config CRs
+// in their supported namespaces with agent DaemonSets still owned by them, plus native objects of the
+// component's managed kinds anywhere in the cluster. SNR/SBR agent DaemonSets are deleted on
+// disable via AgentDaemonSetSelector, so they no longer appear here.
 func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Context, def components.Definition) ([]string, error) {
 	var out []string
 	if len(def.AgentOwners) > 0 {
@@ -297,7 +340,7 @@ func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Con
 			kinds[a.Kind] = true
 		}
 		dsl := &appsv1.DaemonSetList{}
-		if err := r.List(ctx, dsl, client.InNamespace(r.Namespace)); err != nil {
+		if err := r.List(ctx, dsl, r.agentListOptions(def)...); err != nil {
 			return nil, err
 		}
 		for _, ds := range dsl.Items {
@@ -328,7 +371,7 @@ func (r *WorkloadAvailabilityConfigReconciler) retainedResources(ctx context.Con
 		return nil
 	}
 	for _, a := range def.AgentOwners {
-		if err := list(a, client.InNamespace(r.Namespace)); err != nil {
+		if err := list(a, r.agentListOptions(def)...); err != nil {
 			return nil, err
 		}
 	}
@@ -346,14 +389,19 @@ func (r *WorkloadAvailabilityConfigReconciler) finalize(ctx context.Context, wac
 		return ctrl.Result{}, nil
 	}
 	log := logf.FromContext(ctx)
+	progressing := false
 	for _, def := range components.All() {
 		st, err := r.ensureDisabled(ctx, def)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		progressing = progressing || st.Phase == v1alpha1.ComponentPhaseProgressing
 		if len(st.RetainedResources) > 0 {
 			log.Info("config deleted with retained component resources", "component", def.Key, "retained", st.RetainedResources)
 		}
+	}
+	if progressing {
+		return ctrl.Result{RequeueAfter: requeueProgressing}, nil
 	}
 	controllerutil.RemoveFinalizer(wac, Finalizer)
 	return ctrl.Result{}, r.Update(ctx, wac)
@@ -364,14 +412,25 @@ func (r *WorkloadAvailabilityConfigReconciler) SetupWithManager(mgr ctrl.Manager
 	toSingleton := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []reconcile.Request {
 		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: v1alpha1.SingletonName}}}
 	})
-	inNamespace := predicate.NewPredicateFuncs(func(o client.Object) bool { return o.GetNamespace() == r.Namespace })
+	inAgentScope := predicate.NewPredicateFuncs(func(o client.Object) bool {
+		if o.GetNamespace() == r.Namespace {
+			return true
+		}
+		for _, def := range components.All() {
+			if def.AgentsInAllNamespaces && len(def.AgentDaemonSetSelector) > 0 &&
+				labels.SelectorFromSet(def.AgentDaemonSetSelector).Matches(labels.Set(o.GetLabels())) {
+				return true
+			}
+		}
+		return false
+	})
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.WorkloadAvailabilityConfig{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&admissionregistrationv1.ValidatingWebhookConfiguration{}).
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
-		Watches(&appsv1.DaemonSet{}, toSingleton, builder.WithPredicates(inNamespace)).
+		Watches(&appsv1.DaemonSet{}, toSingleton, builder.WithPredicates(inAgentScope)).
 		Named("workloadavailabilityconfig").
 		Complete(r)
 }

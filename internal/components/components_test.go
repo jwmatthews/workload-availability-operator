@@ -133,3 +133,18 @@ func TestEveryComponentDeclaresManagedKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestSNRAndSBRDeclareAgentDaemonSetSelector(t *testing.T) {
+	snr, _ := components.ByKey(v1alpha1.ComponentKeySelfNodeRemediation)
+	sbr, _ := components.ByKey(v1alpha1.ComponentKeyStorageBasedRemediation)
+	nhc, _ := components.ByKey(v1alpha1.ComponentKeyNodeHealthCheck)
+	if snr.AgentDaemonSetSelector["k8s-app"] != "self-node-remediation" {
+		t.Errorf("SNR agent DaemonSet selector = %+v", snr.AgentDaemonSetSelector)
+	}
+	if sbr.AgentDaemonSetSelector["app"] != "sbr-agent" || sbr.AgentDaemonSetSelector["managed-by"] != "sbr-operator" {
+		t.Errorf("SBR agent DaemonSet selector = %+v", sbr.AgentDaemonSetSelector)
+	}
+	if len(nhc.AgentDaemonSetSelector) != 0 {
+		t.Errorf("NHC has no agent DaemonSet, got %+v", nhc.AgentDaemonSetSelector)
+	}
+}

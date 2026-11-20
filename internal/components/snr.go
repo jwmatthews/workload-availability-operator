@@ -16,7 +16,8 @@ func SNR() Definition {
 			{Kind: "ValidatingWebhookConfiguration", Name: "self-node-remediation-validating-webhook-configuration"},
 			{Kind: "MutatingWebhookConfiguration", Name: "self-node-remediation-mutating-webhook-configuration"},
 		},
-		AgentOwners:  []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationConfig"}},
-		ManagedKinds: []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediation"}},
+		AgentOwners:            []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediationConfig"}},
+		ManagedKinds:           []ResourceKind{{Group: "self-node-remediation.medik8s.io", Version: "v1alpha1", Kind: "SelfNodeRemediation"}},
+		AgentDaemonSetSelector: map[string]string{"k8s-app": "self-node-remediation"},
 	}
 }

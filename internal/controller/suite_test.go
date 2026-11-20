@@ -65,7 +65,9 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme, Metrics: metricsserver.Options{BindAddress: "0"}})
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme, Metrics: metricsserver.Options{BindAddress: "0"}, Cache: OperandCacheOptions(ns),
+	})
 	Expect(err).NotTo(HaveOccurred())
 	Expect((&WorkloadAvailabilityConfigReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Namespace: ns, Images: testImages()}).SetupWithManager(mgr)).To(Succeed())
 	go func() { defer GinkgoRecover(); Expect(mgr.Start(ctx)).To(Succeed()) }()

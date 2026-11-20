@@ -39,7 +39,7 @@ func summarize(existing []metav1.Condition, components []v1alpha1.ComponentStatu
 		set(&conds, v1alpha1.ConditionDegraded, metav1.ConditionFalse, "AsExpected", "")
 	}
 	if progressing {
-		set(&conds, v1alpha1.ConditionProgressing, metav1.ConditionTrue, "ComponentsProgressing", "operand rollout or admission readiness pending")
+		set(&conds, v1alpha1.ConditionProgressing, metav1.ConditionTrue, "ComponentsProgressing", "operand rollout, shutdown, or admission readiness pending")
 	} else {
 		set(&conds, v1alpha1.ConditionProgressing, metav1.ConditionFalse, "AsExpected", "")
 	}

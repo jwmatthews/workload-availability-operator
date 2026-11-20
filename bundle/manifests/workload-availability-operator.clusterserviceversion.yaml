@@ -1366,6 +1366,7 @@ spec:
               resources:
                 - daemonsets
               verbs:
+                - delete
                 - get
                 - list
                 - watch

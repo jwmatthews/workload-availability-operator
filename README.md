@@ -210,10 +210,16 @@ removed, the operand objects it renders (not the OLM-owned RBAC). Specifically:
   node agent, operand Deployment or webhook configuration. The CRDs are installed
   regardless, because the CSV owns them (D8).
 - Disabling removes the component's webhook configurations along with the manager. A `Fail` webhook without a backend would block even deleting the component's objects, and WAO never switches a webhook to `Ignore`. While a component is disabled its objects are not validated.
-- Disable is **manager-level**. It does **not** stop what the component created
-  itself: SNR's agent DaemonSet, default config, template and certificate Secret
-  stay, as would SBR's agents and storage objects. WAO reports this as phase
-  `DisableIncomplete` with the objects listed in `retainedResources`.
+- Disable is **manager-level**. It removes the component manager and webhooks,
+  and for SNR and SBR also deletes their agent DaemonSets. WAO waits for the
+  manager Deployment and its pods to disappear before deleting agent DaemonSets,
+  then waits for their pods to terminate. These stages report `Progressing` and
+  preserve the pods' termination grace periods. SBR agent cleanup and retained
+  config reporting cover every namespace; SNR remains scoped to the install
+  namespace. It does **not** stop
+  other objects the component created: SNR's default config, template and
+  certificate Secret stay, as would SBR's config and storage objects. WAO reports
+  this as phase `DisableIncomplete` with the objects listed in `retainedResources`.
 - Native objects that a disabled manager would reconcile are stranded: an active
   `NodeMaintenance` keeps its node cordoned, and FAR, MDR, SNR and SBR remediation
   objects keep their finalizers. Disable a component only when it has no active

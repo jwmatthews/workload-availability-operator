@@ -25,8 +25,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,9 +33,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -205,16 +201,9 @@ func main() {
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
-		// Namespaced operand kinds are cached only in the install namespace. Unstructured
-		// objects are not cached at all (controller-runtime default), so the foreign-object
-		// guard and the retained-resource listing read live from the API server.
-		Cache: cache.Options{ByObject: map[client.Object]cache.ByObject{
-			&appsv1.Deployment{}: {Namespaces: map[string]cache.Config{operatorNamespace: {}}},
-			&appsv1.DaemonSet{}:  {Namespaces: map[string]cache.Config{operatorNamespace: {}}},
-			&corev1.Service{}:    {Namespaces: map[string]cache.Config{operatorNamespace: {}}},
-		}},
-		LeaderElection:   enableLeaderElection,
-		LeaderElectionID: "72846991.medik8s.io",
+		Cache:                  controller.OperandCacheOptions(operatorNamespace),
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "72846991.medik8s.io",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
