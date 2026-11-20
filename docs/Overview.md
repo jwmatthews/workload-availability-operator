@@ -4,11 +4,10 @@ The Workload Availability Operator (WAO) packages six medik8s operators as one
 installation. It intends to simplify publishing and installation while preserving
 the existing behavior.
 
-This document explains the design and how to work with it. 
+See [github.com/medik8s/.github/tree/main/designs/workload-availability-operator/0075-consolidated-operator](https://github.com/medik8s/.github/tree/main/designs/workload-availability-operator/0075-consolidated-operator) for more in depth design.
 
 ## Goal
 Medik8s 5.9 published as a single operator.
-Need to work over next month to learn if there are any blockers that would prevent this.
 
 ## High Level Understanding
 ![WAO High Level](images/WAO_High_Level.svg)
