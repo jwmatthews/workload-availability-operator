@@ -6,12 +6,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-export REG="${REG:-quay.io/jwmatthews}"
-export VERSION="${VERSION:-5.1.0}"
+export REG="${REG:-ttl.sh/$(uuidgen | tr '[:upper:]' '[:lower:]')}"
+export VERSION="${VERSION:-5.1.0-$(date -u +%Y%m%d%H%M%S)}"
 export IMG="${IMG:-$REG/workload-availability-operator:v$VERSION}"
 export BUNDLE_IMG="${BUNDLE_IMG:-$REG/workload-availability-operator-bundle:v$VERSION}"
 export CATALOG_IMG="${CATALOG_IMG:-$REG/workload-availability-operator-catalog:v$VERSION}"
-export KUBECONFIG="${KUBECONFIG:-$PWD/jmatthews-rhwa-ocp5-rc6.kubeconfig}"
 
 # Confirm KUBECONFIG reaches the cluster before spending time on builds.
 if ! oc whoami; then
